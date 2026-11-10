@@ -1,0 +1,20 @@
+{
+  "name": "dev-projects-review",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "start": "turbo run start",
+    "backup": "node scripts/backup.ts"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.18",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,9 @@
+.env
+.env.*
+data/
+.deploy/
+node_modules/
+.next/
+.turbo/
+*.sqlite
+*.sqlite-*

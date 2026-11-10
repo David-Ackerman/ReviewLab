@@ -1,0 +1,20 @@
+{
+  "name": "@reviewlab/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts",
+    "./contracts": "./src/contracts.ts"
+  },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@supabase/storage-js": "^2.119.0",
+    "@vercel/functions": "^3.11.1",
+    "hono": "^4.11.0",
+    "postgres": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,10 @@
+**/node_modules
+**/.next
+**/.turbo
+**/.env*
+**/*.tsbuildinfo
+**/*.sqlite*
+.git
+.deploy
+.vercel
+data

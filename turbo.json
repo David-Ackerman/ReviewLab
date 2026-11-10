@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalPassThroughEnv": [
+    "APP_ORIGIN", "DATA_DIR", "WEENY_DATA_DIR", "DATABASE_URL", "DATABASE_SSL",
+    "SUPABASE_*", "PILOT_INVITE_CODE", "CRON_SECRET", "BREVO_*", "GEMINI_API_KEY",
+    "TRIAGE_*", "WHATSAPP_GROUP_URL", "VERCEL*", "PORT", "HOST", "HOSTNAME"
+  ],
+  "tasks": {
+    "dev": { "cache": false, "persistent": true },
+    "typecheck": { "dependsOn": ["^typecheck"] },
+    "build": { "dependsOn": ["^typecheck"], "env": ["REVIEWLAB_STANDALONE"], "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"] },
+    "start": { "cache": false, "persistent": true }
+  }
+}

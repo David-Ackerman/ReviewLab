@@ -1,0 +1,13 @@
+data/
+.env
+.deploy/
+node_modules/
+.vercel/
+.next/
+.turbo/
+next-env.d.ts
+*.tsbuildinfo
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
