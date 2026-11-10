@@ -6,7 +6,7 @@ export function validateDeployment(env: NodeJS.ProcessEnv) {
     if (!env[name]?.trim()) errors.push('Configure ' + name + ' na Vercel.');
   }
 
-  const database = env.DATABASE_URL && URL.parse(env.DATABASE_URL);
+  const database = URL.parse(env.DATABASE_URL || '');
   if (env.DATABASE_URL && (!database?.hostname || !['postgres:', 'postgresql:'].includes(database.protocol))) {
     errors.push('DATABASE_URL deve ser a URI PostgreSQL do Transaction pooler.');
   }
