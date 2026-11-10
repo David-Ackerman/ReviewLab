@@ -100,7 +100,10 @@ export async function createApi() {
   const cwd = process.cwd();
   const localData = basename(cwd) === 'web' && basename(dirname(cwd)) === 'apps' ? '../../data' : 'data';
   const dataDir = resolve(process.env.DATA_DIR || process.env.WEENY_DATA_DIR || localData);
-  const originSetting = process.env.APP_ORIGIN || (process.env.VERCEL_URL && 'https://' + process.env.VERCEL_URL);
+  const vercelHost = process.env.VERCEL_ENV === 'production'
+    ? process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
+    : process.env.VERCEL_URL;
+  const originSetting = process.env.APP_ORIGIN || (vercelHost && 'https://' + vercelHost);
   const appOrigin = originSetting ? new URL(originSetting).origin : null;
   const pilotInvite = process.env.PILOT_INVITE_CODE?.trim();
   if (vercel && !pilotInvite) throw new Error('Configure PILOT_INVITE_CODE para publicar na Vercel.');
@@ -357,8 +360,13 @@ export async function createApi() {
   });
 
   app.get('/healthz', async c => {
-    await get('SELECT id FROM users LIMIT 1');
-    return json(c, { ok: true });
+    try {
+      await get('SELECT id FROM users LIMIT 1');
+      await storage?.check();
+      return json(c, { ok: true });
+    } catch {
+      return json(c, { ok: false, error: 'Verifique a conexão com o banco e o bucket privado.' }, 503);
+    }
   });
 
   app.get('/api/session', async c => {

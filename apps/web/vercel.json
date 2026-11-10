@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "buildCommand": "node lib/deployment.ts && cd ../.. && pnpm exec turbo run build --filter=@reviewlab/web",
   "crons": [{ "path": "/api/jobs", "schedule": "0 11 * * *" }]
 }
