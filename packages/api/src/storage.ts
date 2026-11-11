@@ -36,8 +36,9 @@ export async function createStorage(db: Database, fail: Fail) {
   const headers: Record<string, string> = { apikey: key };
   if (key.startsWith('eyJ')) headers.Authorization = 'Bearer ' + key;
   const storageFetch = (input: RequestInfo | URL, options?: RequestInit) => fetch(input, { ...options, signal: options?.signal || AbortSignal.timeout(15_000) });
-  const bucket = new StorageClient(origin + '/storage/v1', headers, storageFetch)
-    .from(process.env.SUPABASE_BUCKET || 'reviewlab-private');
+  const client = new StorageClient(origin + '/storage/v1', headers, storageFetch);
+  const bucketName = process.env.SUPABASE_BUCKET || 'reviewlab-private';
+  const bucket = client.from(bucketName);
   const { get, all, run, transaction } = db;
   await transaction(async () => {
     await db.exec(`
@@ -140,5 +141,10 @@ export async function createStorage(db: Database, fail: Fail) {
     return Buffer.from(await data.arrayBuffer());
   }
 
-  return { origin, reserve, verify, consume, signedUrl, read, remove, cleanup };
+  async function check() {
+    const { data, error } = await client.getBucket(bucketName);
+    if (error || !data || data.public !== false) throw new Error('Bucket privado indisponível.');
+  }
+
+  return { origin, reserve, verify, consume, signedUrl, read, remove, cleanup, check };
 }

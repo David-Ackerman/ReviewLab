@@ -2,6 +2,7 @@ import { getApi } from '@reviewlab/api';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 async function handle(request: Request) {
   try {

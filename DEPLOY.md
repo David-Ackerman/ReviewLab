@@ -2,11 +2,26 @@
 
 ## Piloto na Vercel com Supabase
 
-Importe o repositório em um projeto **novo** na Vercel. Use Node.js 24, preset **Next.js** e **Root Directory** `apps/web`. Mantenha a opção **Include source files outside of the Root Directory** ligada para incluir `packages/api` e o workspace pnpm. O endereço HTTPS gerado pela Vercel é suficiente para o piloto. [Turborepo na Vercel](https://vercel.com/docs/monorepos/turborepo) · [Pacotes compartilhados](https://vercel.com/docs/monorepos/monorepo-faq)
+Importe o repositório `David-Ackerman/ReviewLab` em um projeto **novo** chamado `reviewlab` na Vercel. Configure os campos abaixo antes de iniciar o deploy. [Turborepo na Vercel](https://vercel.com/docs/monorepos/turborepo)
+
+Antes de importar pelo GitHub, faça commit e push das alterações locais de preparação de deploy.
+
+| Campo | Valor |
+| --- | --- |
+| Framework Preset | Next.js |
+| Root Directory | `apps/web` |
+| Node.js Version | `24.x` |
+| Build Command | Usar o valor versionado em `apps/web/vercel.json` |
+| Install Command | Automático, usando o lockfile pnpm |
+| Output Directory | Automático, `.next` |
+| Include source files outside of the Root Directory | Habilitado |
+| Fluid Compute | Habilitado |
+
+O comando de build valida a configuração e compila `@reviewlab/web` pelo Turborepo. A validação ocorre antes de consultar o cache. A API Hono faz parte do deploy Next.js. A função permite até 300 segundos para os lotes da fila terminarem. [Duração de funções](https://vercel.com/docs/functions/configuring-functions/duration)
 
 1. Crie um projeto **Free** separado no Supabase. Em **Connect**, copie a string **Transaction pooler** com a senha preenchida para `DATABASE_URL`. A aplicação cria as tabelas na primeira inicialização e habilita RLS sem liberar acesso pela API pública do banco. [Conexões Supabase](https://supabase.com/docs/guides/database/connecting-to-postgres)
-2. Em **Storage**, crie o bucket privado `reviewlab-private`. Defina limite de 20 MB e, se configurar os tipos aceitos, use `image/png,image/jpeg,image/webp,video/mp4,video/webm`. Os arquivos vão direto do navegador ao Supabase. O ReviewLab verifica o tamanho, o formato e quem pode abrir cada anexo.
-3. Cadastre no projeto **ReviewLab** as variáveis abaixo. Use chaves separadas para preview e produção se os ambientes precisarem de dados independentes.
+2. Em **Storage**, crie o bucket privado `reviewlab-private`. Defina limite de 20 MB e tipos `image/png,image/jpeg,image/webp,video/mp4,video/webm`. Os arquivos vão direto do navegador ao Supabase. O ReviewLab verifica o tamanho, o formato e quem pode abrir cada anexo. Copie a **Secret key** do projeto em **Settings → API Keys** para `SUPABASE_SECRET_KEY`. [Buckets privados](https://supabase.com/docs/guides/storage/buckets/fundamentals)
+3. Cadastre no projeto **ReviewLab** as variáveis abaixo em **Settings → Environment Variables**. Configure os ambientes **Preview** e **Production**. Um projeto Supabase separado para preview permite testar com dados próprios desse ambiente.
 
 | Variável | Configuração |
 | --- | --- |
@@ -15,14 +30,34 @@ Importe o repositório em um projeto **novo** na Vercel. Use Node.js 24, preset 
 | `SUPABASE_SECRET_KEY` | Chave secreta do Supabase com acesso ao bucket. Configure apenas no servidor. |
 | `SUPABASE_BUCKET` | Nome do bucket privado. Padrão `reviewlab-private`. |
 | `PILOT_INVITE_CODE` | Código de convite de 16 a 256 caracteres. Obrigatório na Vercel. |
-| `CRON_SECRET` | Segredo aleatório para autorizar a execução diária da fila e a limpeza de uploads abandonados. |
-| `APP_ORIGIN` | URL final HTTPS para os links dos e-mails. O app usa a URL da Vercel como padrão. |
+| `CRON_SECRET` | Segredo aleatório com pelo menos 16 caracteres para autorizar a execução diária da fila e a limpeza de uploads abandonados. |
+| `APP_ORIGIN` | Opcional. Em produção, o app usa o endereço estável `vercel.app` do projeto. Em preview, usa a URL desse deploy. Preencha apenas quando precisar definir outra origem HTTPS. |
 | `WHATSAPP_GROUP_URL` | Opcional. Link do convite do grupo. |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Use `1` para instalar com a versão de pnpm fixada no monorepo. |
 | `BREVO_API_KEY` e `BREVO_SENDER_EMAIL` | Opcionais. Configure no ambiente que pode enviar avisos reais. |
 | `GEMINI_API_KEY` | Opcional. Use um projeto gratuito para habilitar triagem de texto e imagem. |
 
-4. Faça o primeiro deploy como preview a partir de uma branch de teste. Valide `/healthz`, cadastro por convite e envio de uma review com vídeo. A Vercel lê o cron de `apps/web/vercel.json` para a execução agendada em produção.
+Gere valores diferentes para `PILOT_INVITE_CODE` e `CRON_SECRET` executando duas vezes o comando abaixo. Cadastre cada resultado diretamente no painel da Vercel.
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+O build valida as variáveis obrigatórias e seus formatos quando executado na Vercel. Deixe as integrações opcionais vazias no primeiro deploy. A ativação dos avisos por e-mail exige um remetente Brevo verificado.
+
+4. O botão **Deploy** da importação publica a branch selecionada conforme a configuração de produção do projeto. Para testar um preview antes de abrir o piloto, configure o projeto e use uma branch diferente da branch de produção ou a CLI, a partir da raiz do monorepo.
+
+```powershell
+npx vercel login
+npx vercel link
+npx vercel deploy
+```
+
+No vínculo, escolha o projeto `reviewlab` e confira `apps/web` como Root Directory no painel. O comando `vercel deploy` gera um preview. [Deploy pela CLI](https://vercel.com/docs/projects/deploy-from-cli)
+
+5. Abra `/healthz` na URL retornada. A resposta esperada é HTTP 200 com `{"ok":true}`. O endpoint confere banco e acesso ao bucket privado. HTTP 503 indica que uma dependência precisa ser corrigida. Se o preview exigir login da Vercel, use a sessão autorizada do navegador ou execute `npx vercel curl /healthz --deployment <URL_DO_PREVIEW>`.
+6. Crie duas contas por convite. Cadastre e anuncie um projeto na primeira. Na segunda, envie uma review com imagem e vídeo. Confirme a abertura dos anexos nas duas contas, atualize o ticket e conclua um reteste.
+7. Depois de validar o preview, execute `npx vercel deploy --prod` ou publique pela integração Git. O endereço HTTPS `vercel.app` gerado pelo projeto atende ao piloto. O cron roda em produção uma vez por dia, com agendamento de 11h UTC em `apps/web/vercel.json`. [Cron na Vercel](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 
 O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` está vazia. O novo banco de preview começa vazio. A fila dispara em segundo plano quando há novas reviews ou solicitações de review, retoma no catálogo e tem uma execução diária de recuperação. Os vídeos podem ser enviados e reproduzidos na Vercel. A análise de quadros e áudio pelo Gemini exige FFmpeg no ambiente, que não vem configurado nesse deploy.
 

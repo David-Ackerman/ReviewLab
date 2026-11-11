@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import { fileURLToPath } from 'node:url';
+import './lib/deployment.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const config: NextConfig = {
