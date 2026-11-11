@@ -90,10 +90,9 @@ export function Workspace({ mine = false, projectId }: { mine?: boolean; project
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [version, setVersion] = useState(0);
-  const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [afterLogin, setAfterLogin] = useState<'new' | 'review' | null>(null);
+  const [dialog, open] = useState<Dialog | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const locked = Boolean(session && !session.user && (session.inviteRequired || mine));
+  const locked = Boolean(session && !session.user);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,19 +135,6 @@ export function Workspace({ mine = false, projectId }: { mine?: boolean; project
   function refresh(message: string) {
     setNotice(message);
     setVersion(previous => previous + 1);
-  }
-
-  function open(next: Dialog) {
-    setAfterLogin(null);
-    setDialog(next);
-  }
-
-  function requireAccount(next: 'new' | 'review') {
-    if (session?.user) open(next);
-    else {
-      setAfterLogin(next);
-      setDialog('login');
-    }
   }
 
   async function logout() {
@@ -194,32 +180,31 @@ export function Workspace({ mine = false, projectId }: { mine?: boolean; project
       </section> : locked ? <section className="empty access">
         <div className="empty-icon"><UserRound size={24} aria-hidden /></div>
         <h1>{mine ? 'Acesse seus projetos' : 'Entre no ReviewLab'}</h1>
-        <p>{session?.inviteRequired ? 'Use sua conta da comunidade ou crie uma com o código de convite.' : 'Entre para cadastrar projetos e acompanhar suas reviews.'}</p>
+        <p>Entre ou crie uma conta para acessar os projetos e acompanhar suas reviews.</p>
         <div className="action-row"><button className="button primary" onClick={() => open('login')}>Entrar</button>
           <button className="button secondary" onClick={() => open('register')}>Criar conta</button></div>
       </section> : !loaded || !session ? <p className="loading" role="status">Carregando {projectId ? 'projeto' : 'projetos'}…</p>
-        : detail ? <ProjectView detail={detail} session={session} version={version} onEdit={() => open('edit')} onReview={() => requireAccount('review')} onChange={refresh} />
-        : !projectId && <Catalog key={String(mine)} projects={projects} mine={mine} session={session} onNew={() => requireAccount('new')} />}
+        : detail ? <ProjectView detail={detail} session={session} version={version} onEdit={() => open('edit')} onReview={() => open('review')} onChange={refresh} />
+        : !projectId && <Catalog key={String(mine)} projects={projects} mine={mine} session={session} onNew={() => open('new')} />}
     </main>
     <footer className="site-footer"><div><span>ReviewLab</span><span>Projetos, reviews e tickets da comunidade.</span></div></footer>
     {notice && <p className="notice" role="status">{notice}</p>}
-    {dialog && session && <Modal title={dialogTitles[dialog]} onClose={() => setDialog(null)}>
+    {dialog && session && <Modal title={dialogTitles[dialog]} onClose={() => open(null)}>
       {(dialog === 'login' || dialog === 'register' || dialog === 'profile') && <AccountForm key={dialog} mode={dialog} session={session}
-        toggle={() => setDialog(dialog === 'login' ? 'register' : 'login')}
+        toggle={() => open(dialog === 'login' ? 'register' : 'login')}
         onSave={next => {
           setSession(next);
           if (dialog === 'profile') setNotice('Perfil atualizado.');
-          setDialog(afterLogin);
-          setAfterLogin(null);
+          open(null);
         }} />}
       {(dialog === 'new' || dialog === 'edit') && <ProjectForm project={dialog === 'edit' ? detail?.project : undefined} session={session}
         onSave={id => {
-          setDialog(null);
+          open(null);
           if (dialog === 'edit') refresh('Projeto atualizado.');
           else router.push(projectPath(id));
         }} />}
       {dialog === 'review' && detail && <ReviewForm detail={detail} session={session} onSave={ticketId => {
-        setDialog(null);
+        open(null);
         refresh(ticketId ? 'Review enviada e ticket criado.' : 'Review enviada.');
       }} />}
     </Modal>}

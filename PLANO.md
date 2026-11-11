@@ -114,7 +114,7 @@ Um dev cadastra um projeto web, solicita review, outro dev encontra um bug e ane
 
 ## Questões a decidir antes de codificar
 
-1. A comunidade será fechada por convite ou aberta a qualquer pessoa?
+1. O cadastro é aberto. O catálogo exige login.
 2. O grupo de WhatsApp já existe? Qual é seu tamanho e quem é administrador?
 3. Reviews serão apenas relatos técnicos ou também terão nota/opinião geral?
 4. Os projetos de teste podem exigir login e credenciais temporárias? Quem poderá vê-las?
