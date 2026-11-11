@@ -13,11 +13,19 @@ import { platformLabels, projectStatusLabels, ticketStatusLabels } from './contr
 import type { Attachment, Platform, Project, Review, Ticket, TicketEvent, User } from './contracts.ts';
 
 type UserRecord = Omit<User, 'platforms' | 'announcement_emails'> & { platforms: string; announcement_emails: number };
+type ProjectRecord = Omit<Project, 'platforms'> & { platforms: string };
+const publicProject = (project: ProjectRecord): Project => ({
+  ...project, platforms: JSON.parse(project.platforms) as Platform[],
+});
 type Media = { bytes: Uint8Array | null; type: string | null; path?: string; id?: string };
 type Evidence = Media & { name: string };
 type TicketAccess = { owner_id: string; user_id: string };
 type TicketRow = Omit<Ticket, 'missing' | 'suggestion' | 'events' | 'attachments'> & { missing: string | null; suggestion: string | null };
-type AppEnv = { Variables: { user: UserRecord | undefined } };
+type BackgroundTask = () => Promise<unknown>;
+type AppEnv = {
+  Bindings: { afterResponse?: (task: BackgroundTask) => void };
+  Variables: { user: UserRecord | undefined };
+};
 type AppContext = Context<AppEnv>;
 
 class HttpError extends Error {
@@ -120,17 +128,25 @@ export async function createApi() {
       if (!await worker.processNext()) break;
     }
   }
-  function defer(task: Promise<unknown>) {
-    const work = task.catch(error => console.error('Falha em tarefa do ReviewLab:', error instanceof Error ? error.name : 'erro desconhecido'));
-    if (vercel) waitUntil(work);
+  function defer(task: BackgroundTask, c?: AppContext) {
+    const work = async () => {
+      try {
+        await task();
+      } catch (error) {
+        console.error('Falha em tarefa do ReviewLab:', error instanceof Error ? error.name : 'erro desconhecido');
+      }
+    };
+    if (c?.env?.afterResponse) c.env.afterResponse(work);
+    else if (vercel) waitUntil(work());
+    else void work();
   }
-  function schedule(worker: Parameters<typeof drain>[0], max: number) {
-    defer(drain(worker, max));
+  function schedule(worker: Parameters<typeof drain>[0], max: number, c?: AppContext) {
+    defer(() => drain(worker, max), c);
   }
   if (!vercel) {
     if (aiEnabled) setInterval(() => schedule(triage, 1), 5000).unref();
     if (announcements.enabled) setInterval(() => schedule(announcements, 1), 2500).unref();
-    if (storage) setInterval(() => defer(storage.cleanup()), 3600_000).unref();
+    if (storage) setInterval(() => defer(() => storage.cleanup()), 3600_000).unref();
   }
   app.use('*', async (c, next) => {
     c.header('X-Content-Type-Options', 'nosniff');
@@ -175,17 +191,20 @@ export async function createApi() {
   async function projectInput(req: Request, user: UserRecord, project?: Project) {
     const form = await readBody(req, 'form');
     const name = field(form, 'name', 'nome', 100, true);
-    const platform = form.has('platform') ? field(form, 'platform', 'plataforma', 10, true) : project?.platform || 'web';
-    if (!isKey(platformLabels, platform)) fail(400, 'Selecione Web, Android ou iOS.');
+    const selection = form.has('platforms') ? form.getAll('platforms')
+      : form.has('platform') ? [form.get('platform')] : project?.platforms ?? ['web'];
+    if (!selection.every(value => isKey(platformLabels, value))) fail(400, 'Selecione Web, Android ou iOS.');
+    const chosen = platforms.filter(platform => selection.includes(platform));
+    if (!chosen.length) fail(400, 'Selecione pelo menos uma plataforma.');
     const description = field(form, 'description', 'descrição', 1600, true);
     const url = projectUrl(field(form, 'url', 'link', 2048, true));
-    const instructions = field(form, 'instructions', 'instruções de teste', 2000, platform !== 'web');
+    const instructions = field(form, 'instructions', 'instruções de teste', 2000, chosen.some(platform => platform !== 'web'));
     const cover = storage && form.has('cover_id')
       ? await storage.verify(form.get('cover_id'), user.id, project?.id || '', 'cover')
       : await image(form, 'cover');
     const removeCover = form.get('remove_cover') === 'yes';
     if (cover.bytes && removeCover) fail(400, 'Escolha entre trocar ou remover a imagem de capa.');
-    return { name, platform, description, url, instructions, cover, removeCover };
+    return { name, chosen, description, url, instructions, cover, removeCover };
   }
 
   async function image(form: FormData, key: string): Promise<Media> {
@@ -273,16 +292,16 @@ export async function createApi() {
     if (resource.owner_id !== user.id) fail(403, 'Apenas o dono pode alterar este item.');
   }
 
-  const projectFields = `p.id, p.name, p.platform, p.description, p.url, p.instructions, p.status, p.requested_at,
+  const projectFields = `p.id, p.name, p.platform, p.platforms, p.description, p.url, p.instructions, p.status, p.requested_at,
     p.created_at, p.owner_id, u.name AS owner, p.cover IS NOT NULL AS has_cover,
     (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id) AS review_count`;
 
   async function projectFor(id: string, user: UserRecord | undefined) {
     if (!uploadIdPattern.test(id)) fail(404, 'Projeto não encontrado.');
-    const project = await get<Project>(`SELECT ${projectFields} FROM projects p JOIN users u ON u.id = p.owner_id
+    const project = await get<ProjectRecord>(`SELECT ${projectFields} FROM projects p JOIN users u ON u.id = p.owner_id
       WHERE p.id = ? AND (p.requested_at IS NOT NULL OR p.owner_id = ?)`, id, user?.id ?? '');
     if (!project) fail(404, 'Projeto não encontrado.');
-    return project;
+    return publicProject(project);
   }
 
   async function ticketFor(id: string, user: UserRecord | undefined) {
@@ -350,7 +369,7 @@ export async function createApi() {
     if (!cronSecret || !timingSafeEqual(Buffer.from(hash(c.req.header('authorization') || '')), Buffer.from(hash('Bearer ' + cronSecret)))) {
       fail(401, 'Acesso negado.');
     }
-    await Promise.all([drain(triage, 3), drain(announcements, 8), storage?.cleanup()]);
+    await Promise.all([drain(triage, 3), drain(announcements, 20), storage?.cleanup()]);
     return json(c, { ok: true });
   });
 
@@ -437,27 +456,27 @@ export async function createApi() {
   app.get('/api/projects', async c => {
     const user = c.get('user');
     requireUser(user);
-    schedule(triage, 3);
-    schedule(announcements, 8);
-    const projects = await all<Project>(`SELECT ${projectFields},
+    schedule(triage, 3, c);
+    schedule(announcements, 8, c);
+    const projects = await all<ProjectRecord>(`SELECT ${projectFields},
       (SELECT COUNT(*) FROM reviews r JOIN tickets t ON t.review_id = r.id
         WHERE r.project_id = p.id AND r.user_id = ? AND t.retest_request_id IS NOT NULL) AS pending_retests
       FROM projects p JOIN users u ON u.id = p.owner_id
       WHERE p.requested_at IS NOT NULL OR p.owner_id = ?
       ORDER BY pending_retests DESC, COALESCE(p.requested_at, p.created_at) DESC`, user.id, user.id);
-    return json(c, { projects });
+    return json(c, { projects: projects.map(publicProject) });
   });
 
   app.post('/api/projects', async c => {
     const user = c.get('user');
     requireUser(user);
     const id = randomUUID();
-    const { name, platform, description, url, instructions, cover } = await projectInput(c.req.raw, user);
+    const { name, chosen, description, url, instructions, cover } = await projectInput(c.req.raw, user);
     await transaction(async () => {
       await storage?.consume(cover);
-      await run(`INSERT INTO projects (id, owner_id, name, platform, description, url, instructions, status, cover, cover_type, cover_path, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'dev', ?, ?, ?, ?)`,
-        id, user.id, name, platform, description, url, instructions, cover.bytes, cover.type, cover.path ?? null, now());
+      await run(`INSERT INTO projects (id, owner_id, name, platform, platforms, description, url, instructions, status, cover, cover_type, cover_path, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'dev', ?, ?, ?, ?)`,
+        id, user.id, name, chosen[0], JSON.stringify(chosen), description, url, instructions, cover.bytes, cover.type, cover.path ?? null, now());
     });
     return json(c, { id }, 201);
   });
@@ -489,6 +508,7 @@ export async function createApi() {
     })));
     const myReview = await get<{ feedback: string }>('SELECT feedback FROM reviews WHERE project_id = ? AND user_id = ?', id, user.id);
     const emailAnnouncement = project.owner_id === user.id && project.requested_at ? await announcements.summary(id) : null;
+    if (emailAnnouncement?.queued) schedule(announcements, 8, c);
     return json(c, { project, reviews, tickets, myReview: myReview ?? null, emailAnnouncement });
   });
 
@@ -507,18 +527,21 @@ export async function createApi() {
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     requireOwner(project, user);
-    const { name, platform, description, url, instructions, cover, removeCover } = await projectInput(c.req.raw, user, project);
+    const { name, chosen, description, url, instructions, cover, removeCover } = await projectInput(c.req.raw, user, project);
     let previousCover: string | null | undefined;
     await transaction(async () => {
-      await run('UPDATE projects SET name = ?, platform = ?, description = ?, url = ?, instructions = ? WHERE id = ?',
-        name, platform, description, url, instructions, id);
+      await run('UPDATE projects SET name = ?, platform = ?, platforms = ?, description = ?, url = ?, instructions = ? WHERE id = ?',
+        name, chosen[0], JSON.stringify(chosen), description, url, instructions, id);
       if (cover.bytes || removeCover) {
         previousCover = (await get<{ cover_path: string | null }>('SELECT cover_path FROM projects WHERE id = ?', id))?.cover_path;
         await storage?.consume(cover);
         await run('UPDATE projects SET cover = ?, cover_type = ?, cover_path = ? WHERE id = ?', cover.bytes, cover.type, cover.path ?? null, id);
       }
     });
-    if (previousCover && storage) defer(storage.remove(previousCover));
+    if (previousCover && storage) {
+      const path = previousCover;
+      defer(() => storage.remove(path), c);
+    }
     return json(c, {});
   });
 
@@ -530,11 +553,11 @@ export async function createApi() {
     requireOwner(project, user);
     await readBody(c.req.raw, 'json');
     await transaction(async () => {
-      const published = await get<Pick<Project, 'id' | 'owner_id' | 'platform'>>(`UPDATE projects SET requested_at = ?, status = 'review'
-        WHERE id = ? AND requested_at IS NULL RETURNING id, owner_id, platform`, now(), id);
+      const published = await get<{ id: string; owner_id: string }>(`UPDATE projects SET requested_at = ?, status = 'review'
+        WHERE id = ? AND requested_at IS NULL RETURNING id, owner_id`, now(), id);
       if (published) await announcements.enqueue(published);
     });
-    schedule(announcements, vercel ? 8 : 1);
+    schedule(announcements, vercel ? 8 : 1, c);
     return json(c, {});
   });
 
@@ -599,7 +622,7 @@ export async function createApi() {
           ticketId, user.id, createdAt);
       }
     });
-    if (ticketId) schedule(triage, vercel ? 3 : 1);
+    if (ticketId) schedule(triage, vercel ? 3 : 1, c);
     return json(c, { ticketId }, 201);
   });
 

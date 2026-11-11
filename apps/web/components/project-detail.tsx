@@ -1,26 +1,57 @@
 import Link from 'next/link';
-import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, MessageSquare, Monitor, Pencil, Smartphone } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone } from 'lucide-react';
 import {
   platformLabels, projectStatusLabels, reportLabels, ticketStatusLabels,
-  type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
+  type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
 } from '@reviewlab/api/contracts';
 import { api, formatDate, projectApi } from '../lib/client';
 import { SubmitForm } from './forms';
+import { cn } from '../lib/utils';
+import { Button, buttonVariants } from './ui/button';
+import { NativeSelect } from './ui/input';
 
-export function PlatformTag({ platform }: { platform: Project['platform'] }) {
-  const Icon = platform === 'web' ? Monitor : Smartphone;
-  return <span className="platform"><Icon size={14} aria-hidden />{platformLabels[platform]}</span>;
+const panel = 'min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6';
+const panelTitle = 'flex items-center gap-2 text-xl font-bold tracking-tight [&>svg]:shrink-0 [&>svg]:text-primary';
+const emptyPanel = 'mt-4 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground [&>svg]:shrink-0';
+const entry = 'mt-4 grid scroll-mt-4 gap-2 border-t border-border pt-4';
+const textLink = 'inline-flex items-center gap-1 wrap-anywhere text-primary underline underline-offset-2 [&>svg]:shrink-0';
+const prose = 'text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap';
+
+export function PlatformTags({ platforms }: { platforms: Platform[] }) {
+  return <ul className="flex flex-wrap gap-1.5" aria-label="Plataformas">
+    {platforms.map(platform => {
+      const Icon = platform === 'web' ? Monitor : Smartphone;
+      return <li key={platform} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+        <Icon size={13} aria-hidden />{platformLabels[platform]}
+      </li>;
+    })}
+  </ul>;
 }
+
+const statusColors: Record<string, string> = {
+  review: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200',
+  working: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200',
+  dev: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+  open: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+  prod: 'bg-primary/12 text-primary',
+  fixed: 'bg-primary/12 text-primary',
+};
 
 export function StatusTag({ state, label }: { state: string; label: string }) {
-  return <span className={'status state-' + state}><span aria-hidden />{label}</span>;
+  return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', statusColors[state] ?? 'bg-muted text-muted-foreground')}>
+    <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />{label}
+  </span>;
 }
 
-export function ProjectCover({ project, version }: { project: Project; version?: number }) {
+export function ProjectCover({ project, version, className }: { project: Project; version?: number; className?: string }) {
   const suffix = version ? '?v=' + version : '';
-  if (project.has_cover) return <div className="project-cover"><img src={projectApi(project.id) + '/cover' + suffix} alt="" loading="lazy" /></div>;
-  return <div className={'project-cover placeholder cover-' + project.platform} aria-hidden>
-    <span>{project.name.trim().slice(0, 2).toLocaleUpperCase('pt-BR')}</span>
+  return <div className={cn('relative grid aspect-[2/1] shrink-0 place-items-center overflow-hidden border-b border-border bg-muted', className)}>
+    {project.has_cover ? <img className="absolute inset-0 size-full object-cover" src={projectApi(project.id) + '/cover' + suffix} alt="" loading={version === undefined ? 'lazy' : undefined} />
+      : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--color-primary)_35%,transparent)_0.8px,transparent_0.8px)] bg-size-[15px_15px]" aria-hidden>
+        <span className="grid size-16 place-items-center rounded-2xl border border-border bg-card text-xl font-bold tracking-tight text-primary shadow-sm">
+          {project.name.trim().slice(0, 2).toLocaleUpperCase('pt-BR')}
+        </span>
+      </div>}
   </div>;
 }
 
@@ -34,14 +65,14 @@ const eventLabels = {
 function StatusForm({ path, status, labels, label, onChange }: {
   path: string; status: string; labels: Record<string, string>; label: string; onChange: (message: string) => void;
 }) {
-  return <SubmitForm className="inline-form" onSubmit={async data => {
+  return <SubmitForm inline onSubmit={async data => {
     await api(path + '/status', { status: data.get('status') });
     onChange('Status atualizado.');
   }}>
-    <label>{label}<select name="status" defaultValue={status} key={status}>
+    <label className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">{label}<NativeSelect name="status" defaultValue={status} key={status}>
       {Object.entries(labels).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-    </select></label>
-    <button className="button secondary">Atualizar</button>
+    </NativeSelect></label>
+    <Button variant="outline">Atualizar</Button>
   </SubmitForm>;
 }
 
@@ -53,49 +84,75 @@ function TicketCard({ ticket, owner, onChange }: { ticket: Ticket; owner: boolea
   const incomplete = ticket.missing.length > 0 || ticket.suggestion?.confidence === 'baixa';
   const canRetest = ticket.status === 'fixed' && (owner ? !pending : Boolean(pending));
 
-  return <article id={'ticket-' + ticket.id} className="ticket">
+  return <article id={'ticket-' + ticket.id} className={entry}>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="ticket-number">#{ticket.id.slice(0, 8).toUpperCase()}</span>
+      <span className="font-mono text-xs text-muted-foreground">#{ticket.id.slice(0, 8).toUpperCase()}</span>
       <StatusTag state={ticket.status} label={ticketStatusLabels[ticket.status]} />
     </div>
-    <h3>{ticket.title || 'Bug sem título'}</h3>
-    <p className="muted text-sm">{ticket.reporter} · {formatDate(ticket.created_at)} · <a className="text-link" href={'#review-' + ticket.review_id}>Ver review</a></p>
-    <dl className="report">
+    <h3 className="font-semibold wrap-anywhere">{ticket.title || 'Bug sem título'}</h3>
+    <p className="text-sm wrap-anywhere text-muted-foreground">{ticket.reporter} · {formatDate(ticket.created_at)} · <a className={textLink} href={'#review-' + ticket.review_id}>Ver review</a></p>
+    <dl className="grid gap-2">
       {(Object.keys(reportLabels) as Array<keyof typeof reportLabels>).filter(key => key !== 'title' && ticket[key]).map(key =>
-        <div key={key}><dt>{reportLabels[key]}</dt><dd>{ticket[key]}</dd></div>)}
+        <div key={key}><dt className="text-xs font-semibold text-muted-foreground">{reportLabels[key]}</dt><dd className={prose}>{ticket[key]}</dd></div>)}
     </dl>
-    {files.length > 0 && <div className="evidence-list">{files.map(file => <figure key={file.id}>
-      {file.type.startsWith('video/') ? <video controls preload="metadata" src={file.url} aria-label={file.name} /> : <img src={file.url} alt={file.name} loading="lazy" />}
-      <figcaption><a className="text-link" href={file.url} target="_blank" rel="noreferrer"><ArrowDownToLine size={14} aria-hidden />{file.name}</a></figcaption>
+    {files.length > 0 && <div className="grid grid-cols-2 gap-3">{files.map(file => <figure className="min-w-0" key={file.id}>
+      {file.type.startsWith('video/')
+        ? <video className="max-h-56 w-full rounded-lg bg-muted" controls preload="metadata" src={file.url} aria-label={file.name} />
+        : <img className="max-h-56 w-full rounded-lg bg-muted object-contain" src={file.url} alt={file.name} loading="lazy" />}
+      <figcaption className="mt-1 text-xs"><a className={textLink} href={file.url} target="_blank" rel="noreferrer"><ArrowDownToLine size={14} aria-hidden />{file.name}</a></figcaption>
     </figure>)}</div>}
-    {(incomplete || ticket.suggestion || ticket.duplicate_id || ['queued', 'running'].includes(ticket.triage_state ?? '')) && <div className="triage-note">
+    {(incomplete || ticket.suggestion || ticket.duplicate_id || ['queued', 'running'].includes(ticket.triage_state ?? '')) && <div className="grid gap-1 rounded-lg bg-muted p-3 text-xs wrap-anywhere">
       {incomplete && <p><strong>Precisa de detalhes.</strong> {ticket.missing.map(field => reportLabels[field]).join(', ')}</p>}
       {['queued', 'running'].includes(ticket.triage_state ?? '') && <p>Triagem do relato em andamento.</p>}
       {ticket.suggestion && <><p><strong>Sugestão da triagem</strong> · {ticket.suggestion.category} · confiança {ticket.suggestion.confidence}</p>
         <p>{ticket.suggestion.title}</p><p>{ticket.suggestion.summary}</p></>}
-      {ticket.duplicate_id && <a className="text-link" href={'#ticket-' + ticket.duplicate_id}>Ver possível duplicata</a>}
+      {ticket.duplicate_id && <a className={textLink} href={'#ticket-' + ticket.duplicate_id}>Ver possível duplicata</a>}
     </div>}
-    {ticket.events.length > 0 && <details className="ticket-history"><summary>Histórico do ticket</summary>
-      <ol>{ticket.events.map((event, index) => <li key={index}>{eventLabels[event.status]} · {event.actor} · {formatDate(event.created_at)}</li>)}</ol>
+    {ticket.events.length > 0 && <details className="text-xs wrap-anywhere"><summary>Histórico do ticket</summary>
+      <ol className="mt-2 list-inside list-disc text-muted-foreground">{ticket.events.map((event, index) => <li key={index}>{eventLabels[event.status]} · {event.actor} · {formatDate(event.created_at)}</li>)}</ol>
     </details>}
     {owner && <StatusForm path={path} status={ticket.status} labels={ticketStatusLabels} label="Status do ticket" onChange={onChange} />}
-    {ticket.status === 'fixed' && owner && pending && <p className="muted text-sm">Aguardando quem relatou o bug retestar a correção.</p>}
-    {canRetest && <SubmitForm className="inline-form" onSubmit={async data => {
+    {ticket.status === 'fixed' && owner && pending && <p className="text-sm text-muted-foreground">Aguardando quem relatou o bug retestar a correção.</p>}
+    {canRetest && <SubmitForm inline onSubmit={async data => {
       const outcome = String(data.get('outcome'));
       await api(path + '/retest', { outcome, requestId: pending });
       onChange(outcome === 'request' ? 'Reteste solicitado.' : outcome === 'confirmed' ? 'Correção confirmada.' : 'Ticket reaberto.');
     }}>
-      {owner ? <button className="button secondary" name="outcome" value="request">Solicitar reteste</button> : <>
+      {owner ? <Button variant="outline" name="outcome" value="request">Solicitar reteste</Button> : <>
         <p className="w-full text-sm">O dono pediu que você teste a correção.</p>
-        <button className="button primary" name="outcome" value="confirmed">Confirmar correção</button>
-        <button className="button secondary" name="outcome" value="reopened">O bug ainda ocorre</button>
+        <Button name="outcome" value="confirmed">Confirmar correção</Button>
+        <Button variant="outline" name="outcome" value="reopened">O bug ainda ocorre</Button>
       </>}
     </SubmitForm>}
   </article>;
 }
 
+function AnnouncementStatus({ summary, onRefresh }: { summary: AnnouncementSummary; onRefresh: () => void }) {
+  const { enabled, queued, accepted, failed, unknown, cancelled } = summary;
+  const counts = [
+    { label: 'Aceitos pelo provedor', value: accepted },
+    { label: 'Na fila', value: queued },
+    { label: 'Recusados pelo provedor', value: failed - unknown },
+    { label: 'Envio incerto', value: unknown },
+    { label: 'Cancelados', value: cancelled },
+  ].filter(item => item.value > 0);
+
+  return <section className="rounded-xl border border-border bg-muted/50 p-3.5">
+    <h2 className="flex items-center gap-2 text-sm font-semibold"><Mail size={16} className="text-primary" aria-hidden />Avisos por e-mail</h2>
+    <div aria-live="polite">
+      {!enabled && <p className="mt-1.5 text-sm text-muted-foreground">O envio está indisponível.</p>}
+      {counts.length ? <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {counts.map(item => <div className="flex gap-1.5" key={item.label}>
+          <dt>{item.label}</dt><dd className="font-semibold text-foreground tabular-nums">{item.value}</dd>
+        </div>)}
+      </dl> : enabled && <p className="mt-1.5 text-sm text-muted-foreground">Nenhum testador inscrito para este anúncio.</p>}
+    </div>
+    {enabled && queued > 0 && <Button variant="ghost" className="mt-1 -ml-2 px-2" onClick={onRefresh}>Consultar fila</Button>}
+  </section>;
+}
+
 export function ProjectView({ detail, session, version, onEdit, onReview, onChange }: {
-  detail: ProjectDetail; session: Session; version: number; onEdit: () => void; onReview: () => void; onChange: (message: string) => void;
+  detail: ProjectDetail; session: Session; version: number; onEdit: () => void; onReview: () => void; onChange: (message?: string) => void;
 }) {
   const { project, reviews, tickets, myReview, emailAnnouncement } = detail;
   const owner = session.user?.id === project.owner_id;
@@ -104,61 +161,71 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
   };
   const shareLink = () => {
     const url = new URL(window.location.pathname, session.appOrigin || window.location.origin).href;
-    const text = ['Novo projeto para review no ReviewLab!', project.name + ' · ' + platformLabels[project.platform],
+    const text = ['Novo projeto para review no ReviewLab!', project.name + ' · ' + project.platforms.map(platform => platformLabels[platform]).join(', '),
       project.description.slice(0, 240), 'Veja os detalhes e envie sua review: ' + url].join('\n\n');
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
   };
 
   return <>
-    <Link className="back-link" href={owner ? '/?meus' : '/'}><ArrowLeft size={16} aria-hidden /> Voltar aos projetos</Link>
-    <section className="project-hero">
-      <div className="project-hero-content">
-        <div className="flex flex-wrap items-center gap-3"><PlatformTag platform={project.platform} />
+    <Link className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline" href={owner ? '/?meus' : '/'}><ArrowLeft size={16} aria-hidden /> Voltar aos projetos</Link>
+    <section className={cn(panel, 'grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-7')}>
+      <div className="grid min-w-0 gap-4">
+        <div className="flex flex-wrap items-center gap-2"><PlatformTags platforms={project.platforms} />
           <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
         </div>
-        <h1>{project.name}</h1>
-        <p className="muted text-sm">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
-        <p className="project-description">{project.description}</p>
-        <div className="action-row">
-          <a className="button secondary" href={project.url} target="_blank" rel="noreferrer">
-            {project.platform === 'web' ? 'Abrir projeto' : 'Abrir link do app'} <ArrowUpRight size={16} aria-hidden />
-          </a>
-          {owner && <button className="button secondary" onClick={onEdit}><Pencil size={15} aria-hidden />Editar</button>}
-          {owner && project.requested_at && <button className="button secondary" onClick={shareLink}><MessageSquare size={16} aria-hidden />Compartilhar no WhatsApp</button>}
-          {!owner && project.requested_at && <button className="button primary" onClick={onReview}><MessageSquare size={16} aria-hidden />
-            {myReview ? 'Editar review ou relatar bug' : 'Enviar review'}
-          </button>}
+        <div>
+          <h1 className="text-3xl leading-tight font-bold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
+          <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
         </div>
-        {owner && !project.requested_at && <SubmitForm className="inline-form" onSubmit={async () => {
-          await api(projectApi(project.id) + '/request', {});
-          onChange('Pedido de review publicado.');
-        }}>
-          <button className="button primary"><MessageSquare size={16} aria-hidden />Solicitar review</button>
-          {session.emailAnnouncementsEnabled && <p className="muted text-sm">Testadores inscritos para esta plataforma recebem um aviso por e-mail.</p>}
-        </SubmitForm>}
-        {emailAnnouncement && (emailAnnouncement.enabled || emailAnnouncement.accepted || emailAnnouncement.failed || emailAnnouncement.queued) ? <div className="action-row">
-          <p className="muted text-sm">Aviso por e-mail · {emailAnnouncement.accepted} aceitos pelo serviço · {emailAnnouncement.queued} na fila · {emailAnnouncement.failed} sem confirmação</p>
-          {emailAnnouncement.queued > 0 && <button className="button quiet" onClick={() => onChange('Fila de avisos atualizada.')}>Atualizar fila</button>}
-        </div> : null}
+        <p className={prose}>{project.description}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <a className={buttonVariants({ variant: 'outline' })} href={project.url} target="_blank" rel="noreferrer">
+            Abrir projeto <ArrowUpRight size={16} aria-hidden />
+          </a>
+          {owner && <Button variant="outline" onClick={onEdit}><Pencil size={15} aria-hidden />Editar</Button>}
+          {owner && project.requested_at && <Button variant="outline" onClick={shareLink}><MessageSquare size={16} aria-hidden />Compartilhar no WhatsApp</Button>}
+          {!owner && project.requested_at && <Button onClick={onReview}><MessageSquare size={16} aria-hidden />
+            {myReview ? 'Editar review ou relatar bug' : 'Enviar review'}
+          </Button>}
+        </div>
+        {owner && !project.requested_at && <div className="rounded-xl border border-border bg-muted/50 p-3.5">
+          <SubmitForm inline onSubmit={async () => {
+            await api(projectApi(project.id) + '/request', {});
+            onChange('Pedido de review publicado.');
+          }}>
+            <Button><MessageSquare size={16} aria-hidden />Solicitar review</Button>
+            <p className="w-full text-sm text-muted-foreground">{session.emailAnnouncementsEnabled
+              ? 'Envia um aviso aos testadores inscritos em pelo menos uma das plataformas do projeto.'
+              : 'O pedido aparece no catálogo. Os avisos por e-mail estão indisponíveis.'}</p>
+          </SubmitForm>
+        </div>}
+        {emailAnnouncement && <AnnouncementStatus summary={emailAnnouncement} onRefresh={() => onChange()} />}
         {owner && <StatusForm path={projectApi(project.id)} status={project.status} labels={statuses} label="Status do projeto" onChange={onChange} />}
       </div>
-      <ProjectCover project={project} version={version} />
+      <ProjectCover project={project} version={version} className="order-first aspect-video rounded-xl border lg:order-last" />
     </section>
-    {project.instructions && <section className="panel instructions"><h2><ClipboardList size={19} aria-hidden />Como testar</h2><p>{project.instructions}</p></section>}
-    <div className={'detail-grid' + (owner || tickets.length ? ' with-tickets' : '')}>
-      <section className="panel">
-        <h2><MessageSquare size={19} aria-hidden />Reviews <span className="total">{reviews.length}</span></h2>
-        {reviews.length ? reviews.map(review => <article className="review-item" key={review.id} id={'review-' + review.id}>
-          <div><h3>{review.author}</h3><time className="muted text-sm" dateTime={review.created_at}>{formatDate(review.created_at)}</time></div>
-          <p>{review.feedback || 'Review enviada com relato de bug.'}</p>
-        </article>) : <p className="panel-empty"><MessageSquare size={18} aria-hidden />As reviews enviadas aparecem aqui.</p>}
+    {project.instructions && <section className={cn(panel, 'mt-4 grid gap-3')}>
+      <h2 className={panelTitle}><ClipboardList size={19} aria-hidden />Como testar</h2>
+      <p className={prose}>{project.instructions}</p>
+    </section>}
+    <div className={cn('mt-4 grid items-start gap-4', (owner || tickets.length > 0) && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]')}>
+      <section className={panel}>
+        <h2 className={panelTitle}><MessageSquare size={19} aria-hidden />Reviews <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{reviews.length}</span></h2>
+        {reviews.length ? reviews.map(review => <article className={entry} key={review.id} id={'review-' + review.id}>
+          <div className="flex flex-wrap justify-between gap-2">
+            <h3 className="font-semibold wrap-anywhere">{review.author}</h3>
+            <time className="text-sm text-muted-foreground" dateTime={review.created_at}>{formatDate(review.created_at)}</time>
+          </div>
+          <p className={prose}>{review.feedback || 'Review enviada com relato de bug.'}</p>
+        </article>) : <p className={emptyPanel}><MessageSquare size={18} aria-hidden />As reviews enviadas aparecem aqui.</p>}
       </section>
-      {(owner || tickets.length > 0) && <section className="panel">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h2><FolderOpen size={19} aria-hidden />{owner ? 'Tickets' : 'Seus tickets'} <span className="total">{tickets.length}</span></h2>
-          {tickets.some(ticket => ['queued', 'running'].includes(ticket.triage_state ?? '')) && <button className="button quiet" onClick={() => onChange('Tickets atualizados.')}>Atualizar tickets</button>}
+      {(owner || tickets.length > 0) && <section className={panel}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={panelTitle}><FolderOpen size={19} aria-hidden />{owner ? 'Tickets' : 'Seus tickets'} <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{tickets.length}</span></h2>
+          {tickets.some(ticket => ['queued', 'running'].includes(ticket.triage_state ?? '')) && <Button variant="ghost" onClick={() => onChange()}>Atualizar tickets</Button>}
         </div>
         {tickets.length ? tickets.map(ticket => <TicketCard key={ticket.id} ticket={ticket} owner={owner} onChange={onChange} />)
-          : <p className="panel-empty"><FolderOpen size={18} aria-hidden />Os relatos de bugs aparecem aqui.</p>}
+          : <p className={emptyPanel}><FolderOpen size={18} aria-hidden />Os relatos de bugs aparecem aqui.</p>}
       </section>}
     </div>
   </>;
