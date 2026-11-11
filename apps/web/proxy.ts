@@ -21,6 +21,7 @@ export function proxy(request: NextRequest) {
 
   // Next reads the request policy to attach the nonce to its hydration scripts.
   const headers = new Headers(request.headers);
+  headers.set('x-nonce', nonce);
   headers.set('Content-Security-Policy', policy);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set('Content-Security-Policy', policy);

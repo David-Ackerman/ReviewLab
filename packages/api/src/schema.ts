@@ -42,6 +42,8 @@ export async function migrate(db: Database) {
   `);
     await db.addColumn('users', 'announcement_emails', 'INTEGER NOT NULL DEFAULT 0 CHECK(announcement_emails IN (0,1))');
     await db.addColumn('projects', 'platform', "TEXT NOT NULL DEFAULT 'web' CHECK(platform IN ('web','android','ios'))");
+    await db.addColumn('projects', 'platforms', 'TEXT');
+    await db.run(`UPDATE projects SET platforms = '["' || platform || '"]' WHERE platforms IS NULL`);
     await db.addColumn('tickets', 'retest_request_id', 'TEXT');
     await db.addColumn('projects', 'cover_path', 'TEXT');
     await db.addColumn('ticket_attachments', 'storage_path', 'TEXT');

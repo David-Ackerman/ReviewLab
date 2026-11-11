@@ -33,6 +33,7 @@ export type Project = {
   id: string;
   name: string;
   platform: Platform;
+  platforms: Platform[];
   description: string;
   url: string;
   instructions: string;
@@ -66,7 +67,9 @@ export type Ticket = Report & {
   attachments: Attachment[];
 };
 
-export type AnnouncementSummary = { enabled: boolean; queued: number; accepted: number; failed: number };
+export type AnnouncementSummary = {
+  enabled: boolean; queued: number; accepted: number; failed: number; unknown: number; cancelled: number;
+};
 export type ProjectDetail = {
   project: Project;
   reviews: Review[];

@@ -1,6 +1,6 @@
 # ReviewLab
 
-Plataforma de reviews entre devs. O monorepo TypeScript usa Turborepo e pnpm. A interface em `apps/web` usa Next.js, React e Tailwind. A API Hono em `packages/api` é servida pelo Next.js em `/api`. O modo local usa SQLite, e o deploy na Vercel usa PostgreSQL e Storage do Supabase.
+Plataforma de reviews entre devs. O monorepo TypeScript usa Turborepo e pnpm. A interface em `apps/web` usa Next.js, React, Tailwind e shadcn/ui. A API Hono em `packages/api` é servida pelo Next.js em `/api`. O modo local usa SQLite, e o deploy na Vercel usa PostgreSQL e Storage do Supabase.
 
 ## Rodar localmente
 
@@ -24,7 +24,7 @@ Abra [o ReviewLab local](http://127.0.0.1:3000). O banco fica em `data/app.sqlit
 
 Qualquer pessoa pode criar uma conta. O catálogo e as páginas de projeto exigem login.
 
-1. Crie uma conta, selecione as plataformas que você consegue testar e cadastre um projeto. Para Android e iOS, informe o link da versão e os passos para acessar o teste. Abra o projeto e clique em **Solicitar review** para anunciá-lo no catálogo. O botão **Editar projeto** aparece para o dono, e o perfil de testador pode ser editado pelo botão com seu nome.
+1. Crie uma conta, selecione as plataformas que você consegue testar e cadastre um projeto. Marque todas as plataformas do projeto e informe o link principal. Para Android ou iOS, inclua os passos de acesso e links adicionais nas instruções. Abra o projeto e clique em **Solicitar review** para anunciá-lo no catálogo.
 2. Em outra sessão de navegador, crie uma segunda conta. Abra o projeto anunciado, clique em **Enviar review**, marque **Encontrei um bug** e descreva o que aconteceu ou anexe evidências. O formulário aceita até 4 arquivos e 25 MB no total. Imagens PNG, JPEG ou WebP podem ter até 5 MB cada. Vídeos MP4 ou WebM podem ter até 20 MB cada.
 3. Na primeira conta, recarregue a página do projeto. A seção **Tickets** mostra o relato, sua review de origem e a evidência. Altere o status e consulte o histórico.
 4. Marque o ticket como **Corrigido** e clique em **Solicitar reteste**. Na conta de quem relatou o bug, o projeto aparece com a indicação **Reteste para você**. Abra o ticket e confirme a correção ou reabra o chamado se o bug ainda ocorrer.
@@ -54,6 +54,10 @@ O guia cobre o deploy na Vercel com Supabase e a execução com Docker e SQLite 
 
 ## Avisos por e-mail
 
-O primeiro pedido de review de um projeto entra na fila de e-mail para os testadores que ativaram os avisos e marcaram a plataforma correspondente. Cada pessoa recebe o próprio e-mail com o link do projeto. O dono vê o andamento na página do projeto. Os membros podem cancelar futuros avisos no perfil.
+O primeiro pedido de review entra na fila para os testadores que ativaram os avisos e marcaram ao menos uma plataforma do projeto. Cada testador elegível recebe um e-mail por projeto, mesmo quando testa várias das plataformas selecionadas. Os membros podem desativar futuros avisos no perfil.
 
-Use um remetente verificado em `BREVO_SENDER_EMAIL` e a chave do Brevo em `BREVO_API_KEY`. A fila exige uma origem HTTPS para gerar os links dos avisos. O ReviewLab limita as tentativas a 100 em 24 horas, abaixo dos 300 envios diários incluídos no plano gratuito do Brevo. O Brevo pode substituir um remetente de domínio gratuito por um endereço próprio. [Plano gratuito do Brevo](https://help.brevo.com/hc/en-us/articles/208580669-FAQs-What-are-the-limits-of-the-Free-plan) · [Remetente sem domínio próprio](https://help.brevo.com/hc/en-us/articles/14925263522578-Comply-with-Gmail-Yahoo-and-Microsoft-s-requirements-for-email-senders)
+O dono acompanha na página do projeto os avisos na fila, aceitos, recusados, cancelados ou sem confirmação. A entrega pode ser conferida no painel de e-mails do Resend. [Configuração e teste do Resend](DEPLOY.md#ativar-e-validar-os-avisos-por-e-mail)
+
+## Roadmap
+
+[Prioridades e critérios para o piloto](roadmap.md)

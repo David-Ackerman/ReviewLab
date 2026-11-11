@@ -33,7 +33,7 @@ O comando de build valida a configuração e compila `@reviewlab/web` pelo Turbo
 | `APP_ORIGIN` | Opcional. Em produção, o app usa o endereço estável `vercel.app` do projeto. Em preview, usa a URL desse deploy. Preencha apenas quando precisar definir outra origem HTTPS. |
 | `WHATSAPP_GROUP_URL` | Opcional. Link do convite do grupo. |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Use `1` para instalar com a versão de pnpm fixada no monorepo. |
-| `BREVO_API_KEY` e `BREVO_SENDER_EMAIL` | Opcionais. Configure no ambiente que pode enviar avisos reais. |
+| `RESEND_API_KEY` e `RESEND_FROM_EMAIL` | Opcionais. Chave de envio do Resend e endereço do remetente. Configure no ambiente que pode enviar avisos reais. |
 | `GEMINI_API_KEY` | Opcional. Use um projeto gratuito para habilitar triagem de texto e imagem. |
 
 Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Vercel.
@@ -42,7 +42,7 @@ Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Ve
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-O build valida as variáveis obrigatórias e seus formatos quando executado na Vercel. Deixe as integrações opcionais vazias no primeiro deploy. A ativação dos avisos por e-mail exige um remetente Brevo verificado.
+O build valida as variáveis obrigatórias e seus formatos quando executado na Vercel. Deixe as integrações opcionais vazias no primeiro deploy. Para enviar avisos aos testadores, verifique um domínio remetente no Resend.
 
 4. O botão **Deploy** da importação publica a branch selecionada conforme a configuração de produção do projeto. Para testar um preview antes de abrir o piloto, configure o projeto e use uma branch diferente da branch de produção ou a CLI, a partir da raiz do monorepo.
 
@@ -58,7 +58,20 @@ No vínculo, escolha o projeto `reviewlab` e confira `apps/web` como Root Direct
 6. Crie duas contas. Cadastre e anuncie um projeto na primeira. Na segunda, envie uma review com imagem e vídeo. Confirme a abertura dos anexos nas duas contas, atualize o ticket e conclua um reteste.
 7. Depois de validar o preview, execute `npx vercel deploy --prod` ou publique pela integração Git. O endereço HTTPS `vercel.app` gerado pelo projeto atende ao piloto. O cron roda em produção uma vez por dia, com agendamento de 11h UTC em `apps/web/vercel.json`. [Cron na Vercel](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 
-O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` está vazia. O novo banco de preview começa vazio. A fila dispara em segundo plano quando há novas reviews ou solicitações de review, retoma no catálogo e tem uma execução diária de recuperação. Os vídeos podem ser enviados e reproduzidos na Vercel. A análise de quadros e áudio pelo Gemini exige FFmpeg no ambiente, que não vem configurado nesse deploy.
+O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` está vazia. O novo banco de preview começa vazio. As filas são processadas em segundo plano. A execução diária recupera pendências. Os vídeos podem ser enviados e reproduzidos na Vercel. A análise de quadros e áudio pelo Gemini exige FFmpeg no ambiente, que não vem configurado nesse deploy.
+
+## Ativar e validar os avisos por e-mail
+
+1. No Resend, abra **Domains → Add Domain**. Adicione um domínio que você controla, como `avisos.seudominio.com.br`. Copie os registros de envio exibidos para o painel DNS do domínio e aguarde o status **Verified**. [Domínios verificados](https://resend.com/docs/dashboard/domains/introduction)
+2. Abra **API Keys → Create API Key**, dê à chave o nome `ReviewLab` e escolha a permissão **Sending access**. Guarde a chave em `RESEND_API_KEY`. Em `RESEND_FROM_EMAIL`, informe um endereço do domínio verificado, como `reviewlab@avisos.seudominio.com.br`. [Chaves do Resend](https://resend.com/docs/dashboard/api-keys/introduction)
+3. Na Vercel, adicione as duas variáveis em **Settings → Environment Variables**, selecione **Preview** ou **Production** e publique um novo deploy com este código. O endereço HTTPS padrão da Vercel já serve para os links dos projetos. Se usar um endereço público diferente, configure `APP_ORIGIN` com a origem HTTPS. Fora da Vercel, configure também `APP_ORIGIN` com a URL pública HTTPS. No Docker, use o `.env` da raiz e recrie o serviço. Ao rodar o Next.js diretamente, use `apps/web/.env.local` e reinicie o servidor.
+4. Em uma conta de teste do ReviewLab, ative os avisos no perfil e selecione uma plataforma. Em outra conta, crie um projeto novo nessa plataforma e clique em **Solicitar review**. Consulte **Avisos por e-mail** na página do projeto e confirme a entrega no painel **Emails** do Resend e na caixa de entrada.
+
+Para testar sem domínio próprio, use `RESEND_FROM_EMAIL=onboarding@resend.dev` em um ambiente de teste. Use como destinatário do ReviewLab o mesmo endereço cadastrado na sua conta do Resend. Esse remetente permite enviar apenas para esse endereço. [Domínio de teste do Resend](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
+
+Se aparecer **Nenhum testador inscrito**, confira o consentimento, a plataforma e se o destinatário é outra conta. Se o Resend recusar um envio, confira o status HTTP nos logs do servidor e o painel do provedor. A fila respeita `Retry-After` em respostas HTTP 429. Uma resposta sem confirmação fica registrada como incerta, pois o provedor pode ter recebido o pedido. A fila expira avisos pendentes após 48 horas.
+
+O cron `/api/jobs` recupera até 20 avisos por execução. A publicação, o catálogo e a consulta do projeto pelo dono também acionam lotes em segundo plano. Como o aviso é enfileirado no primeiro pedido de review, publique um projeto novo para testar depois de ativar a integração.
 
 ## Ativar o Gemini na Vercel
 
