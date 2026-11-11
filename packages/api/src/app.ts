@@ -105,11 +105,6 @@ export async function createApi() {
     : process.env.VERCEL_URL;
   const originSetting = process.env.APP_ORIGIN || (vercelHost && 'https://' + vercelHost);
   const appOrigin = originSetting ? new URL(originSetting).origin : null;
-  const pilotInvite = process.env.PILOT_INVITE_CODE?.trim();
-  if (vercel && !pilotInvite) throw new Error('Configure PILOT_INVITE_CODE para publicar na Vercel.');
-  if (pilotInvite && (pilotInvite.length < 16 || pilotInvite.length > 256)) {
-    throw new Error('PILOT_INVITE_CODE deve ter de 16 a 256 caracteres.');
-  }
   const cronSecret = process.env.CRON_SECRET;
   const whatsappGroup = groupLink(process.env.WHATSAPP_GROUP_URL);
   const db = await openDatabase(dataDir);
@@ -117,7 +112,7 @@ export async function createApi() {
   const { get, all, run, transaction } = db;
   const storage = await createStorage(db, fail);
   const triage = await createTriage(db, storage);
-  const announcements = await createAnnouncements(db, appOrigin, pilotInvite);
+  const announcements = await createAnnouncements(db, appOrigin);
   const app = new Hono<AppEnv>();
 
   async function drain(worker: { processNext: () => Promise<true | undefined> }, max: number) {
@@ -371,8 +366,8 @@ export async function createApi() {
 
   app.get('/api/session', async c => {
     const user = c.get('user');
-    return json(c, { user: publicUser(user), whatsappGroup: pilotInvite && !user ? null : whatsappGroup,
-      appOrigin, aiEnabled, inviteRequired: Boolean(pilotInvite), emailAnnouncementsEnabled: announcements.enabled,
+    return json(c, { user: publicUser(user), whatsappGroup: user ? whatsappGroup : null,
+      appOrigin, aiEnabled, emailAnnouncementsEnabled: announcements.enabled,
       directUploads: Boolean(storage) });
   });
 
@@ -411,9 +406,6 @@ export async function createApi() {
       fail(400, 'Informe um e-mail válido e uma senha de 8 a 128 caracteres.');
     }
     if (register) {
-      if (pilotInvite && !timingSafeEqual(Buffer.from(hash(pilotInvite)), Buffer.from(hash(field(data, 'invite_code', 'código de convite', 256))))) {
-        fail(403, 'Informe um código de convite válido.');
-      }
       const { name, chosen } = testerProfile(data);
       const id = randomUUID();
       const salt = randomBytes(16).toString('hex');
@@ -444,17 +436,15 @@ export async function createApi() {
 
   app.get('/api/projects', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
-    if (user) {
-      schedule(triage, 3);
-      schedule(announcements, 8);
-    }
+    requireUser(user);
+    schedule(triage, 3);
+    schedule(announcements, 8);
     const projects = await all<Project>(`SELECT ${projectFields},
       (SELECT COUNT(*) FROM reviews r JOIN tickets t ON t.review_id = r.id
         WHERE r.project_id = p.id AND r.user_id = ? AND t.retest_request_id IS NOT NULL) AS pending_retests
       FROM projects p JOIN users u ON u.id = p.owner_id
       WHERE p.requested_at IS NOT NULL OR p.owner_id = ?
-      ORDER BY pending_retests DESC, COALESCE(p.requested_at, p.created_at) DESC`, user?.id ?? '', user?.id ?? '');
+      ORDER BY pending_retests DESC, COALESCE(p.requested_at, p.created_at) DESC`, user.id, user.id);
     return json(c, { projects });
   });
 
@@ -474,18 +464,18 @@ export async function createApi() {
 
   app.get('/api/projects/:id', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     const reviews = await all<Review>(`SELECT r.id, r.feedback, r.created_at, u.name AS author FROM reviews r
       JOIN users u ON u.id = r.user_id WHERE r.project_id = ? ORDER BY r.created_at DESC`, id);
-    const rows = user ? await all<TicketRow>(`SELECT t.id, t.title, t.observed, t.expected, t.steps, t.environment, t.status, t.retest_request_id,
+    const rows = await all<TicketRow>(`SELECT t.id, t.title, t.observed, t.expected, t.steps, t.environment, t.status, t.retest_request_id,
       t.evidence IS NOT NULL AS has_evidence, t.created_at, r.id AS review_id, u.name AS reporter,
       q.state AS triage_state, q.missing, q.suggestion, q.duplicate_id
       FROM tickets t JOIN reviews r ON r.id = t.review_id JOIN users u ON u.id = r.user_id
       LEFT JOIN ticket_triage q ON q.ticket_id = t.id
       WHERE r.project_id = ? AND (? = ? OR r.user_id = ?) ORDER BY t.created_at DESC`,
-      id, user.id, project.owner_id, user.id) : [];
+      id, user.id, project.owner_id, user.id);
     const events = `SELECT e.status, e.created_at, u.name AS actor FROM ticket_events e
       JOIN users u ON u.id = e.actor_id WHERE e.ticket_id = ? ORDER BY e.id`;
     const fileList = 'SELECT id, name, type FROM ticket_attachments WHERE ticket_id = ? ORDER BY position';
@@ -495,16 +485,16 @@ export async function createApi() {
       attachments: await all<Attachment>(fileList, row.id),
       missing: row.missing ? JSON.parse(row.missing) as Ticket['missing'] : missingFields(row),
       suggestion: row.suggestion ? JSON.parse(row.suggestion) as Ticket['suggestion'] : null,
-      duplicate_id: user?.id === project.owner_id ? row.duplicate_id : undefined,
+      duplicate_id: user.id === project.owner_id ? row.duplicate_id : undefined,
     })));
-    const myReview = user ? await get<{ feedback: string }>('SELECT feedback FROM reviews WHERE project_id = ? AND user_id = ?', id, user.id) : null;
-    const emailAnnouncement = project.owner_id === user?.id && project.requested_at ? await announcements.summary(id) : null;
+    const myReview = await get<{ feedback: string }>('SELECT feedback FROM reviews WHERE project_id = ? AND user_id = ?', id, user.id);
+    const emailAnnouncement = project.owner_id === user.id && project.requested_at ? await announcements.summary(id) : null;
     return json(c, { project, reviews, tickets, myReview: myReview ?? null, emailAnnouncement });
   });
 
   app.get('/api/projects/:id/cover', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     const cover = await get<Media & { cover_path: string | null }>('SELECT cover AS bytes, cover_type AS type, cover_path FROM projects WHERE id = ?', id);
@@ -513,7 +503,7 @@ export async function createApi() {
 
   app.post('/api/projects/:id/edit', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     requireOwner(project, user);
@@ -534,7 +524,7 @@ export async function createApi() {
 
   app.post('/api/projects/:id/request', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     requireOwner(project, user);
@@ -550,7 +540,7 @@ export async function createApi() {
 
   app.post('/api/projects/:id/status', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     requireOwner(project, user);
@@ -563,10 +553,9 @@ export async function createApi() {
 
   app.post('/api/projects/:id/reviews', async c => {
     const user = c.get('user');
-    if (pilotInvite) requireUser(user);
+    requireUser(user);
     const id = c.req.param('id');
     const project = await projectFor(id, user);
-    requireUser(user);
     if (!project.requested_at) fail(409, 'O projeto ainda não foi anunciado.');
     if (project.owner_id === user.id) fail(403, 'Você não pode revisar seu próprio projeto.');
     const form = await readBody(c.req.raw, 'form', maxEvidence);

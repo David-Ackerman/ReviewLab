@@ -5,13 +5,13 @@ const platformNames = { web: 'Web', android: 'Android', ios: 'iOS' };
 const day = 86_400_000;
 const dailyLimit = 100;
 
-export async function createAnnouncements(db: Database, appOrigin: string | null, pilotInvite: string | undefined) {
+export async function createAnnouncements(db: Database, appOrigin: string | null) {
   const { get, all, run, transaction } = db;
   const key = process.env.BREVO_API_KEY?.trim();
   const sender = process.env.BREVO_SENDER_EMAIL?.trim();
-  const enabled = Boolean(key && sender && pilotInvite && appOrigin?.startsWith('https://'));
+  const enabled = Boolean(key && sender && appOrigin?.startsWith('https://'));
   if ((key || sender) && !enabled) {
-    console.warn('Anúncios por e-mail precisam de BREVO_API_KEY, BREVO_SENDER_EMAIL, convite do piloto e APP_ORIGIN em HTTPS.');
+    console.warn('Anúncios por e-mail precisam de BREVO_API_KEY, BREVO_SENDER_EMAIL e uma origem HTTPS.');
   }
   await transaction(async () => {
     await db.exec(`

@@ -25,7 +25,6 @@ export type Session = {
   whatsappGroup: string | null;
   appOrigin: string | null;
   aiEnabled: boolean;
-  inviteRequired: boolean;
   emailAnnouncementsEnabled: boolean;
   directUploads: boolean;
 };

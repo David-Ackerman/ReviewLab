@@ -2,7 +2,7 @@
   "$schema": "https://turborepo.dev/schema.json",
   "globalPassThroughEnv": [
     "APP_ORIGIN", "DATA_DIR", "WEENY_DATA_DIR", "DATABASE_URL", "DATABASE_SSL",
-    "SUPABASE_*", "PILOT_INVITE_CODE", "CRON_SECRET", "BREVO_*", "GEMINI_API_KEY",
+    "SUPABASE_*", "CRON_SECRET", "BREVO_*", "GEMINI_API_KEY", "ENABLE_EXPERIMENTAL_COREPACK",
     "TRIAGE_*", "WHATSAPP_GROUP_URL", "VERCEL*", "PORT", "HOST", "HOSTNAME"
   ],
   "tasks": {

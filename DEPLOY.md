@@ -29,7 +29,6 @@ O comando de build valida a configuração e compila `@reviewlab/web` pelo Turbo
 | `SUPABASE_URL` | URL HTTPS do projeto Supabase. |
 | `SUPABASE_SECRET_KEY` | Chave secreta do Supabase com acesso ao bucket. Configure apenas no servidor. |
 | `SUPABASE_BUCKET` | Nome do bucket privado. Padrão `reviewlab-private`. |
-| `PILOT_INVITE_CODE` | Código de convite de 16 a 256 caracteres. Obrigatório na Vercel. |
 | `CRON_SECRET` | Segredo aleatório com pelo menos 16 caracteres para autorizar a execução diária da fila e a limpeza de uploads abandonados. |
 | `APP_ORIGIN` | Opcional. Em produção, o app usa o endereço estável `vercel.app` do projeto. Em preview, usa a URL desse deploy. Preencha apenas quando precisar definir outra origem HTTPS. |
 | `WHATSAPP_GROUP_URL` | Opcional. Link do convite do grupo. |
@@ -37,7 +36,7 @@ O comando de build valida a configuração e compila `@reviewlab/web` pelo Turbo
 | `BREVO_API_KEY` e `BREVO_SENDER_EMAIL` | Opcionais. Configure no ambiente que pode enviar avisos reais. |
 | `GEMINI_API_KEY` | Opcional. Use um projeto gratuito para habilitar triagem de texto e imagem. |
 
-Gere valores diferentes para `PILOT_INVITE_CODE` e `CRON_SECRET` executando duas vezes o comando abaixo. Cadastre cada resultado diretamente no painel da Vercel.
+Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Vercel.
 
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -50,16 +49,22 @@ O build valida as variáveis obrigatórias e seus formatos quando executado na V
 ```powershell
 npx vercel login
 npx vercel link
-npx vercel deploy
+npx vercel deploy --environment preview
 ```
 
-No vínculo, escolha o projeto `reviewlab` e confira `apps/web` como Root Directory no painel. O comando `vercel deploy` gera um preview. [Deploy pela CLI](https://vercel.com/docs/projects/deploy-from-cli)
+No vínculo, escolha o projeto `reviewlab` e confira `apps/web` como Root Directory no painel. [Deploy pela CLI](https://vercel.com/docs/projects/deploy-from-cli)
 
 5. Abra `/healthz` na URL retornada. A resposta esperada é HTTP 200 com `{"ok":true}`. O endpoint confere banco e acesso ao bucket privado. HTTP 503 indica que uma dependência precisa ser corrigida. Se o preview exigir login da Vercel, use a sessão autorizada do navegador ou execute `npx vercel curl /healthz --deployment <URL_DO_PREVIEW>`.
-6. Crie duas contas por convite. Cadastre e anuncie um projeto na primeira. Na segunda, envie uma review com imagem e vídeo. Confirme a abertura dos anexos nas duas contas, atualize o ticket e conclua um reteste.
+6. Crie duas contas. Cadastre e anuncie um projeto na primeira. Na segunda, envie uma review com imagem e vídeo. Confirme a abertura dos anexos nas duas contas, atualize o ticket e conclua um reteste.
 7. Depois de validar o preview, execute `npx vercel deploy --prod` ou publique pela integração Git. O endereço HTTPS `vercel.app` gerado pelo projeto atende ao piloto. O cron roda em produção uma vez por dia, com agendamento de 11h UTC em `apps/web/vercel.json`. [Cron na Vercel](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 
 O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` está vazia. O novo banco de preview começa vazio. A fila dispara em segundo plano quando há novas reviews ou solicitações de review, retoma no catálogo e tem uma execução diária de recuperação. Os vídeos podem ser enviados e reproduzidos na Vercel. A análise de quadros e áudio pelo Gemini exige FFmpeg no ambiente, que não vem configurado nesse deploy.
+
+## Ativar o Gemini na Vercel
+
+1. Crie uma chave em um projeto **Free** sem faturamento associado. [Google AI Studio](https://aistudio.google.com/apikey) · [Preços e cotas do Gemini](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite)
+2. No ReviewLab, abra **Settings → Environment Variables**. Adicione `GEMINI_API_KEY` como **Secret** no ambiente **Preview**. O modelo padrão é `gemini-3.1-flash-lite`. Para limitar o piloto a 30 tentativas por mês, adicione `TRIAGE_MONTHLY_CALL_LIMIT=30`. [Variáveis na Vercel](https://vercel.com/docs/environment-variables)
+3. Faça um novo deploy de preview. Envie um relato fictício com campos faltantes, marque a autorização para o Gemini e confira a sugestão da triagem no ticket. A integração roda apenas em relatos autorizados que precisam de ajuda com detalhes ou possíveis duplicatas.
 
 ## Deploy com Docker em servidor próprio
 
@@ -67,7 +72,7 @@ O piloto roda em uma única instância Node com Docker Compose. O volume `review
 
 ## Subir o piloto
 
-1. Em um servidor com Docker e Compose, copie `.env.example` para `.env`. Defina `APP_ORIGIN` com o endereço HTTPS que os membros vão usar, `PILOT_INVITE_CODE` com um código aleatório de pelo menos 16 caracteres e `WHATSAPP_GROUP_URL` com o convite do grupo.
+1. Em um servidor com Docker e Compose, copie `.env.example` para `.env`. Defina `APP_ORIGIN` com o endereço HTTPS que os membros vão usar e `WHATSAPP_GROUP_URL` com o convite do grupo.
 2. Para ativar a triagem, configure `GEMINI_API_KEY` no servidor com a chave de um projeto **Free** sem faturamento. Deixe a variável vazia para começar com a triagem local.
 3. Execute os comandos abaixo no diretório do projeto.
 
@@ -85,7 +90,7 @@ reviewlab.seudominio.com {
 }
 ```
 
-Se mudar `REVIEWLAB_PORT`, ajuste a porta no proxy e no teste de saúde executado no host. Valide pela URL HTTPS o cadastro por convite, a review com anexo, a abertura do ticket e o link gerado em **Compartilhar no WhatsApp**.
+Se mudar `REVIEWLAB_PORT`, ajuste a porta no proxy e no teste de saúde executado no host. Valide pela URL HTTPS o cadastro, a review com anexo, a abertura do ticket e o link gerado em **Compartilhar no WhatsApp**.
 
 ## Backup e restauração
 

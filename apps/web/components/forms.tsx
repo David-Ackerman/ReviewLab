@@ -88,7 +88,6 @@ export function AccountForm({ mode, session, toggle, onSave }: {
       <label>E-mail<input name="email" autoComplete="email" type="email" maxLength={254} required /></label>
       <label>Senha<input name="password" autoComplete={login ? 'current-password' : 'new-password'} type="password" minLength={8} maxLength={128} required /></label>
     </>}
-    {mode === 'register' && session.inviteRequired && <label>Código de convite<input name="invite_code" autoComplete="off" maxLength={256} required /></label>}
     {!login && <TesterFields selected={user?.platforms ?? ['web']} emails={user?.announcement_emails} />}
     <div className="form-actions"><button className="button primary">{login ? 'Entrar' : profile ? 'Salvar perfil' : 'Criar conta'}</button>
       {!profile && <button className="button quiet" type="button" onClick={toggle}>{login ? 'Criar uma conta' : 'Já tenho conta'}</button>}

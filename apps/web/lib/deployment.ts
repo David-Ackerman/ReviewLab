@@ -2,7 +2,7 @@ export function validateDeployment(env: NodeJS.ProcessEnv) {
   if (env.VERCEL !== '1') return;
 
   const errors: string[] = [];
-  for (const name of ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'PILOT_INVITE_CODE', 'CRON_SECRET']) {
+  for (const name of ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'CRON_SECRET']) {
     if (!env[name]?.trim()) errors.push('Configure ' + name + ' na Vercel.');
   }
 
@@ -20,10 +20,6 @@ export function validateDeployment(env: NodeJS.ProcessEnv) {
     }
   }
 
-  const invite = env.PILOT_INVITE_CODE?.trim();
-  if (invite && (invite.length < 16 || invite.length > 256)) {
-    errors.push('PILOT_INVITE_CODE deve ter de 16 a 256 caracteres.');
-  }
   if (env.CRON_SECRET && env.CRON_SECRET.length < 16) {
     errors.push('CRON_SECRET deve ter pelo menos 16 caracteres.');
   }
