@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bell, Boxes, Compass, Folder, LogOut, MessageCircle, UserRound } from 'lucide-react';
+import { ArrowUpRight, Bell, Boxes, Compass, Folder, LogOut, MessageCircle, UserRound } from 'lucide-react';
 import type { Session } from '@reviewlab/api/contracts';
 import { api, errorMessage } from '../../lib/client';
 import { ThemeToggle } from '../theme';
@@ -94,12 +94,15 @@ export function WorkspaceShell({ session, active, children, signInHref = '/entra
             {key === 'notifications' && unread > 0 && <span aria-hidden className="absolute top-0.5 right-0.5 rounded-full bg-primary px-1.5 text-[10px] leading-4 font-bold text-primary-foreground tabular-nums lg:static lg:ml-auto">{unread > 99 ? '99+' : unread}</span>}
           </Link>
         ))}
+        {session.whatsappGroup && <a href={session.whatsappGroup} target="_blank" rel="noreferrer"
+          className="col-span-4 flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium text-foreground hover:bg-muted">
+          <MessageCircle size={17} aria-hidden />
+          <span>Grupo do WhatsApp</span>
+          <ArrowUpRight size={14} className="ml-auto text-muted-foreground" aria-hidden />
+        </a>}
         <span className="sr-only" role="status">{unread > 0 ? `${unread} ${unread === 1 ? 'notificação não lida' : 'notificações não lidas'}` : ''}</span>
       </nav>}
       <div className="col-start-2 row-start-1 mr-2 flex items-center gap-1 lg:mt-auto lg:mr-0 lg:flex-wrap lg:border-t lg:border-border lg:p-3">
-        {session?.whatsappGroup && <a className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label="Grupo do WhatsApp" title="Grupo do WhatsApp" href={session.whatsappGroup} target="_blank" rel="noreferrer">
-          <MessageCircle size={17} aria-hidden />
-        </a>}
         <ThemeToggle />
         {session?.user ? <Button variant="ghost" size="icon" aria-label="Sair da conta" title="Sair da conta" onClick={logout} disabled={signingOut}><LogOut size={17} aria-hidden /></Button>
           : session && <Link href={signInHref} className={buttonVariants({ variant: 'outline' })}>Entrar</Link>}
