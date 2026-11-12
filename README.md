@@ -22,13 +22,17 @@ Abra [o ReviewLab local](http://127.0.0.1:3000). O banco fica em `data/app.sqlit
 
 ## Demonstrar o fluxo
 
-Qualquer pessoa pode criar uma conta. O catálogo e as páginas de projeto exigem login.
+O cadastro começa em **Criar conta**. Abra o link recebido por e-mail para definir nome, senha e plataformas. Contas antigas continuam podendo entrar e verificar o endereço em **Meu perfil**. O catálogo e as páginas de projeto exigem login.
 
 1. Crie uma conta, selecione as plataformas que você consegue testar e cadastre um projeto. Marque todas as plataformas do projeto e informe o link principal. Para Android ou iOS, inclua os passos de acesso e links adicionais nas instruções. Abra o projeto e clique em **Solicitar review** para anunciá-lo no catálogo.
 2. Em outra sessão de navegador, crie uma segunda conta. Abra o projeto anunciado, clique em **Enviar review**, marque **Encontrei um bug** e descreva o que aconteceu ou anexe evidências. O formulário aceita até 4 arquivos e 25 MB no total. Imagens PNG, JPEG ou WebP podem ter até 5 MB cada. Vídeos MP4 ou WebM podem ter até 20 MB cada.
 3. Na primeira conta, recarregue a página do projeto. A seção **Tickets** mostra o relato, sua review de origem e a evidência. Altere o status e consulte o histórico.
 4. Marque o ticket como **Corrigido** e clique em **Solicitar reteste**. Na conta de quem relatou o bug, o projeto aparece com a indicação **Reteste para você**. Abra o ticket e confirme a correção ou reabra o chamado se o bug ainda ocorrer.
 5. Use **Compartilhar no WhatsApp** para abrir a mensagem pronta e escolha o grupo no WhatsApp. O convite do grupo aparece no menu quando configurado.
+
+### Testadores Android
+
+Em **Meu perfil**, preencha o e-mail usado para aceitar convites do Google Play. A opção pública disponibiliza esse endereço aos donos de projetos Android na área autenticada. Se deixar privado, abra um projeto anunciado e escolha **Compartilhar e-mail de teste**. Só o dono daquele projeto pode ver o endereço. Ele recebe um aviso em **Notificações**. Você pode remover o compartilhamento na mesma tela.
 
 ## Triagem de bugs
 
@@ -54,7 +58,7 @@ O guia cobre o deploy na Vercel com Supabase e a execução com Docker e SQLite 
 
 ## Avisos por e-mail
 
-O primeiro pedido de review entra na fila para os testadores que ativaram os avisos e marcaram ao menos uma plataforma do projeto. Cada testador elegível recebe um e-mail por projeto, mesmo quando testa várias das plataformas selecionadas. Os membros podem desativar futuros avisos no perfil.
+O primeiro pedido de review entra na fila para os testadores com e-mail verificado que ativaram os avisos e marcaram ao menos uma plataforma do projeto. Cada testador elegível recebe um e-mail por projeto, mesmo quando testa várias das plataformas selecionadas. Os membros podem desativar futuros avisos no perfil.
 
 O dono acompanha na página do projeto os avisos na fila, aceitos, recusados, cancelados ou sem confirmação. A entrega pode ser conferida no painel de e-mails do Resend. [Configuração e teste do Resend](DEPLOY.md#ativar-e-validar-os-avisos-por-e-mail)
 

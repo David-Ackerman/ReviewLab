@@ -18,6 +18,9 @@ export type User = {
   email: string;
   platforms: Platform[];
   announcement_emails: boolean;
+  email_verified: boolean;
+  android_test_email: string | null;
+  android_test_email_public: boolean;
 };
 
 export type Session = {
@@ -27,7 +30,17 @@ export type Session = {
   aiEnabled: boolean;
   emailAnnouncementsEnabled: boolean;
   directUploads: boolean;
+  unreadNotifications: number;
 };
+
+export type AndroidTester = { id: string; name: string; email: string; shared: boolean };
+export type AndroidTestersResponse = { testers: AndroidTester[]; sharedByMe: boolean };
+export type Notification = { id: string; projectId: string; projectName: string; actorName: string; createdAt: string; read: boolean };
+
+export function accountDestination(value: unknown) {
+  return typeof value === 'string' && /^(?:\/\?meus|\/perfil|\/notificacoes|\/projetos\/[a-f0-9-]{36})$/.test(value)
+    ? value : undefined;
+}
 
 export type Project = {
   id: string;

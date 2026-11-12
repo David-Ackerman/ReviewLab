@@ -1,17 +1,13 @@
 import type { Database } from './database.ts';
 import { platformLabels, type Platform } from './contracts.ts';
+import type { Mailer } from './mailer.ts';
 
 const day = 86_400_000;
 const dailyLimit = 100;
 
-export async function createAnnouncements(db: Database, appOrigin: string | null) {
+export async function createAnnouncements(db: Database, mailer: Mailer) {
   const { get, all, run, transaction } = db;
-  const key = process.env.RESEND_API_KEY?.trim();
-  const sender = process.env.RESEND_FROM_EMAIL?.trim();
-  const enabled = Boolean(key && sender && appOrigin?.startsWith('https://'));
-  if ((key || sender) && !enabled) {
-    console.warn('Anúncios por e-mail precisam de RESEND_API_KEY, RESEND_FROM_EMAIL e uma origem HTTPS.');
-  }
+  const enabled = Boolean(mailer);
   await transaction(async () => {
     await db.exec(`
     CREATE TABLE IF NOT EXISTS announcement_emails (
@@ -41,7 +37,7 @@ export async function createAnnouncements(db: Database, appOrigin: string | null
     if (!enabled) return;
     await run(`INSERT INTO announcement_emails (project_id, user_id, state, created_at)
       SELECT p.id, u.id, 'queued', ? FROM users u CROSS JOIN projects p
-      WHERE p.id = ? AND u.id <> ? AND u.announcement_emails = 1
+      WHERE p.id = ? AND u.id <> ? AND u.announcement_emails = 1 AND u.email_verified_at IS NOT NULL
         AND EXISTS (${platformMatch})
       ON CONFLICT(project_id, user_id) DO NOTHING`, Date.now(), project.id, project.owner_id);
   }
@@ -66,7 +62,7 @@ export async function createAnnouncements(db: Database, appOrigin: string | null
       await run(`UPDATE announcement_emails SET state = 'cancelled' WHERE state = 'queued'
         AND (created_at <= ? OR NOT EXISTS (
           SELECT 1 FROM users u JOIN projects p ON p.id = announcement_emails.project_id
-          WHERE u.id = announcement_emails.user_id AND u.announcement_emails = 1
+          WHERE u.id = announcement_emails.user_id AND u.announcement_emails = 1 AND u.email_verified_at IS NOT NULL
             AND EXISTS (${platformMatch})
         ))`, time - 2 * day);
       // A resposta 429 é do provedor. Pause a fila inteira durante o intervalo informado.
@@ -84,36 +80,21 @@ export async function createAnnouncements(db: Database, appOrigin: string | null
 
   let busy = false;
   async function processNext() {
-    if (!enabled || busy || !key || !sender || !appOrigin) return;
+    if (!mailer || busy) return;
     busy = true;
     try {
       const item = await claim();
       if (!item) return;
       const title = item.name.replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').trim();
-      const url = new URL('/projetos/' + item.project_id, appOrigin).href;
+      const url = new URL('/projetos/' + item.project_id, mailer.origin).href;
       const targets = (JSON.parse(item.platforms) as Platform[]).map(platform => platformLabels[platform]).join(', ');
       let state = 'unknown';
       let messageId: string | null = null;
       let retryAfter: number | null = null;
       try {
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + key,
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'Idempotency-Key': `review-request/${item.project_id}/${item.user_id}`,
-            'User-Agent': 'ReviewLab',
-          },
-          signal: AbortSignal.timeout(12_000),
-          body: JSON.stringify({
-            from: `ReviewLab <${sender}>`,
-            to: [item.email],
-            subject: 'ReviewLab · Novo projeto para review: ' + title,
-            text: `O projeto ${title} (${targets}) está aberto para review.\n\n${url}\n\nPara deixar de receber avisos, entre no ReviewLab e desmarque a opção no seu perfil.`,
-            tags: [{ name: 'type', value: 'review-request' }],
-          }),
-        });
+        const response = await mailer.send(item.email, 'ReviewLab · Novo projeto para review: ' + title,
+          `O projeto ${title} (${targets}) está aberto para review.\n\n${url}\n\nPara deixar de receber avisos, entre no ReviewLab e desmarque a opção no seu perfil.`,
+          'review-request', `review-request/${item.project_id}/${item.user_id}`);
         if (response.ok) {
           const result = await response.json();
           if (typeof result?.id === 'string' && result.id) {
