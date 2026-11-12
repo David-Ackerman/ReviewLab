@@ -28,4 +28,6 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ['/', '/projetos/:id'] };
+export const config = {
+  matcher: ['/', '/projetos/:id', '/entrar', '/cadastro/:path*', '/perfil', '/notificacoes', '/verificar-email', '/recuperar-senha', '/redefinir-senha'],
+};

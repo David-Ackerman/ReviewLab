@@ -8,11 +8,16 @@ import { openDatabase } from './database.ts';
 import { migrate } from './schema.ts';
 import { aiEnabled, createTriage, missingFields } from './triage.ts';
 import { createAnnouncements } from './announcements.ts';
+import { createMailer } from './mailer.ts';
+import { createAccountTokens } from './account-tokens.ts';
 import { createStorage, mediaType, cleanFilename, uploadIdPattern } from './storage.ts';
-import { platformLabels, projectStatusLabels, ticketStatusLabels } from './contracts.ts';
-import type { Attachment, Platform, Project, Review, Ticket, TicketEvent, User } from './contracts.ts';
+import { accountDestination, platformLabels, projectStatusLabels, ticketStatusLabels } from './contracts.ts';
+import type { AndroidTester, Attachment, Notification, Platform, Project, Review, Ticket, TicketEvent, User } from './contracts.ts';
 
-type UserRecord = Omit<User, 'platforms' | 'announcement_emails'> & { platforms: string; announcement_emails: number };
+type UserRecord = Omit<User, 'platforms' | 'announcement_emails' | 'email_verified' | 'android_test_email_public'> & {
+  platforms: string; announcement_emails: number; email_verified_at: string | null; android_test_email_public: number;
+};
+const userFields = 'u.id, u.name, u.email, u.platforms, u.announcement_emails, u.email_verified_at, u.android_test_email, u.android_test_email_public';
 type ProjectRecord = Omit<Project, 'platforms'> & { platforms: string };
 const publicProject = (project: ProjectRecord): Project => ({
   ...project, platforms: JSON.parse(project.platforms) as Platform[],
@@ -120,7 +125,9 @@ export async function createApi() {
   const { get, all, run, transaction } = db;
   const storage = await createStorage(db, fail);
   const triage = await createTriage(db, storage);
-  const announcements = await createAnnouncements(db, appOrigin);
+  const mailer = createMailer(appOrigin);
+  const accountTokens = createAccountTokens(db, mailer);
+  const announcements = await createAnnouncements(db, mailer);
   const app = new Hono<AppEnv>();
 
   async function drain(worker: { processNext: () => Promise<true | undefined> }, max: number) {
@@ -257,13 +264,19 @@ export async function createApi() {
   }
 
   function publicUser(user: UserRecord | undefined): User | null {
-    return user ? { ...user, platforms: JSON.parse(user.platforms) as Platform[], announcement_emails: Boolean(user.announcement_emails) } : null;
+    if (!user) return null;
+    const { email_verified_at, ...record } = user;
+    return {
+      ...record, platforms: JSON.parse(record.platforms) as Platform[],
+      announcement_emails: Boolean(record.announcement_emails), email_verified: Boolean(email_verified_at),
+      android_test_email_public: Boolean(record.android_test_email_public),
+    };
   }
 
   async function userFor(c: AppContext) {
     const token = sessionToken(c);
     if (!token) return undefined;
-    return get<UserRecord>(`SELECT u.id, u.name, u.email, u.platforms, u.announcement_emails FROM sessions s
+    return get<UserRecord>(`SELECT ${userFields} FROM sessions s
       JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires > ?`, hash(token), Date.now());
   }
 
@@ -271,16 +284,19 @@ export async function createApi() {
     setCookie(c, 'session', token, { httpOnly: true, path: '/', sameSite: 'Lax', secure: Boolean(appOrigin?.startsWith('https:')), maxAge: age });
   }
 
-  async function startSession(c: AppContext, id: string) {
+  async function startSession(c: AppContext, id: string, expectedPasswordHash?: string) {
     const token = randomBytes(32).toString('hex');
     const oldToken = sessionToken(c);
     await transaction(async () => {
+      if (expectedPasswordHash && !await get('SELECT id FROM users WHERE id = ? AND password_hash = ?', id, expectedPasswordHash)) {
+        fail(401, 'E-mail ou senha inválidos.');
+      }
       if (oldToken) await run('DELETE FROM sessions WHERE token_hash = ?', hash(oldToken));
       await run('DELETE FROM sessions WHERE expires <= ?', Date.now());
       await run('INSERT INTO sessions VALUES (?, ?, ?)', hash(token), id, Date.now() + sessionAge * 1000);
     });
     sessionCookie(c, token, sessionAge);
-    return publicUser(await get<UserRecord>('SELECT id, name, email, platforms, announcement_emails FROM users WHERE id = ?', id));
+    return publicUser(await get<UserRecord>(`SELECT ${userFields} FROM users u WHERE u.id = ?`, id));
   }
 
   function requireUser(user: UserRecord | undefined): asserts user is UserRecord {
@@ -383,11 +399,50 @@ export async function createApi() {
     }
   });
 
+  async function unreadNotifications(userId: string) {
+    const unread = await get<{ total: number }>('SELECT COUNT(*) AS total FROM notifications WHERE recipient_id = ? AND read_at IS NULL', userId);
+    return unread?.total ?? 0;
+  }
+
   app.get('/api/session', async c => {
     const user = c.get('user');
     return json(c, { user: publicUser(user), whatsappGroup: user ? whatsappGroup : null,
       appOrigin, aiEnabled, emailAnnouncementsEnabled: announcements.enabled,
-      directUploads: Boolean(storage) });
+      directUploads: Boolean(storage), unreadNotifications: user ? await unreadNotifications(user.id) : 0 });
+  });
+
+  app.get('/api/notifications/count', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    return json(c, { unreadNotifications: await unreadNotifications(user.id) });
+  });
+
+  app.get('/api/notifications', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const rows = await all<{ id: string; project_id: string; project_name: string; actor_name: string; created_at: string; read_at: string | null }>(
+      `SELECT n.id, n.project_id, p.name AS project_name, u.name AS actor_name, n.created_at, n.read_at
+       FROM notifications n JOIN projects p ON p.id = n.project_id JOIN users u ON u.id = n.actor_id
+       WHERE n.recipient_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 100`, user.id);
+    const notifications: Notification[] = rows.map(row => ({
+      id: row.id, projectId: row.project_id, projectName: row.project_name, actorName: row.actor_name,
+      createdAt: row.created_at, read: Boolean(row.read_at),
+    }));
+    return json(c, { notifications });
+  });
+
+  app.post('/api/notifications/read', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const data = await readBody(c.req.raw, 'json');
+    if (data.all === true) {
+      await run('UPDATE notifications SET read_at = ? WHERE recipient_id = ? AND read_at IS NULL', now(), user.id);
+    } else {
+      const id = field(data, 'id', 'notificação', 36, true);
+      if (!uploadIdPattern.test(id)) fail(400, 'Notificação inválida.');
+      await run('UPDATE notifications SET read_at = ? WHERE recipient_id = ? AND id = ? AND read_at IS NULL', now(), user.id, id);
+    }
+    return json(c, { ok: true });
   });
 
   app.post('/api/uploads', async c => {
@@ -411,39 +466,145 @@ export async function createApi() {
     requireUser(user);
     const data = await readBody(c.req.raw, 'json');
     const { name, chosen } = testerProfile(data);
-    const receive = typeof data.announcement_emails === 'boolean' ? data.announcement_emails : Boolean(user.announcement_emails);
-    await run('UPDATE users SET name = ?, platforms = ?, announcement_emails = ? WHERE id = ?', name, JSON.stringify(chosen), Number(receive), user.id);
-    return json(c, { user: { ...publicUser(user), name, platforms: chosen, announcement_emails: receive } });
+    const address = Object.hasOwn(data, 'android_test_email') ? accountEmail(data, 'android_test_email', false) : undefined;
+    const updated = await transaction(async () => {
+      const current = await get<UserRecord>(`SELECT ${userFields} FROM users u WHERE u.id = ?`, user.id);
+      requireUser(current);
+      const receive = typeof data.announcement_emails === 'boolean' ? Number(data.announcement_emails) : current.announcement_emails;
+      const visibility = typeof data.android_test_email_public === 'boolean'
+        ? Number(data.android_test_email_public) : current.android_test_email_public;
+      const androidEmail = address === undefined ? current.android_test_email : address || null;
+      if (androidEmail !== current.android_test_email) await run('DELETE FROM android_test_shares WHERE tester_id = ?', user.id);
+      await run(`UPDATE users SET name = ?, platforms = ?, announcement_emails = ?, android_test_email = ?, android_test_email_public = ?
+        WHERE id = ?`, name, JSON.stringify(chosen), receive, androidEmail, visibility, user.id);
+      return get<UserRecord>(`SELECT ${userFields} FROM users u WHERE u.id = ?`, user.id);
+    });
+    return json(c, { user: publicUser(updated) });
   });
 
-  async function authenticate(c: AppContext, register: boolean) {
+  function accountEmail(data: Record<string, unknown>, key = 'email', required = true) {
+    const email = field(data, key, key === 'email' ? 'e-mail' : 'e-mail de teste Android', 254, required).toLowerCase();
+    if (email && !/^[^\s@,;<>:]+@[^\s@,;<>:]+\.[^\s@,;<>:]+$/.test(email)) fail(400, 'Informe um e-mail válido.');
+    return email;
+  }
+
+  function accountPassword(data: Record<string, unknown>) {
+    const password = typeof data.password === 'string' ? data.password : '';
+    if (password.length < 8 || password.length > 128) fail(400, 'A senha deve ter de 8 a 128 caracteres.');
+    return password;
+  }
+
+  function requireMailer() {
+    if (!mailer) fail(503, 'O envio de e-mails da conta está indisponível.');
+  }
+
+  function invalidAccountLink(): never {
+    return fail(400, 'Este link é inválido, expirou ou já foi usado. Solicite um novo link.');
+  }
+
+  app.post('/api/register', async c => {
+    requireMailer();
     limitAuth(c);
     const data = await readBody(c.req.raw, 'json');
-    const email = field(data, 'email', 'e-mail', 254, true).toLowerCase();
-    const password = typeof data.password === 'string' ? data.password : '';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 128) {
-      fail(400, 'Informe um e-mail válido e uma senha de 8 a 128 caracteres.');
-    }
-    if (register) {
-      const { name, chosen } = testerProfile(data);
-      const id = randomUUID();
-      const salt = randomBytes(16).toString('hex');
-      const key = await derive(password, salt);
-      const inserted = await run(`INSERT INTO users (id, name, email, salt, password_hash, platforms, announcement_emails)
-        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING`,
-        id, name, email, salt, key.toString('hex'), JSON.stringify(chosen), Number(data.announcement_emails === true));
-      if (!inserted.changes) fail(409, 'Já existe uma conta com esse e-mail.');
-      return json(c, { user: await startSession(c, id) }, 201);
-    }
+    const email = accountEmail(data);
+    defer(async () => {
+      if (!await get('SELECT id FROM users WHERE email = ?', email)) {
+        await accountTokens.send('signup', email, null, accountDestination(data.next));
+      }
+    }, c);
+    return json(c, { ok: true }, 202);
+  });
+
+  app.post('/api/register/complete', async c => {
+    limitAuth(c);
+    const data = await readBody(c.req.raw, 'json');
+    const { name, chosen } = testerProfile(data);
+    const password = accountPassword(data);
+    if (!await accountTokens.find('signup', data.token)) invalidAccountLink();
+    const id = randomUUID();
+    const salt = randomBytes(16).toString('hex');
+    const key = await derive(password, salt);
+    await transaction(async () => {
+      const token = await accountTokens.find('signup', data.token);
+      if (!token) invalidAccountLink();
+      const inserted = await run(`INSERT INTO users (id, name, email, salt, password_hash, platforms, announcement_emails, email_verified_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING`,
+        id, name, token.email, salt, key.toString('hex'), JSON.stringify(chosen), Number(data.announcement_emails === true), now());
+      if (!inserted.changes) invalidAccountLink();
+      await accountTokens.invalidate('signup', token.email);
+    });
+    return json(c, { user: await startSession(c, id) }, 201);
+  });
+
+  app.post('/api/login', async c => {
+    limitAuth(c);
+    const data = await readBody(c.req.raw, 'json');
+    const email = accountEmail(data);
+    const password = accountPassword(data);
     const record = await get<{ id: string; salt: string; password_hash: string }>('SELECT id, salt, password_hash FROM users WHERE email = ?', email);
     const key = await derive(password, record?.salt || 'missing-account-salt');
     if (!record || !timingSafeEqual(key, Buffer.from(record.password_hash, 'hex'))) {
       fail(401, 'E-mail ou senha inválidos.');
     }
-    return json(c, { user: await startSession(c, record.id) });
-  }
-  app.post('/api/register', c => authenticate(c, true));
-  app.post('/api/login', c => authenticate(c, false));
+    return json(c, { user: await startSession(c, record.id, record.password_hash) });
+  });
+
+  app.post('/api/email/verify/request', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    await readBody(c.req.raw, 'json');
+    if (!user.email_verified_at) {
+      requireMailer();
+      limitAuth(c);
+      defer(() => accountTokens.send('verify', user.email, user.id), c);
+    }
+    return json(c, { ok: true }, 202);
+  });
+
+  app.post('/api/email/verify', async c => {
+    limitAuth(c);
+    const data = await readBody(c.req.raw, 'json');
+    await transaction(async () => {
+      const token = await accountTokens.find('verify', data.token);
+      if (!token?.user_id) invalidAccountLink();
+      const updated = await run('UPDATE users SET email_verified_at = ? WHERE id = ? AND email = ? AND email_verified_at IS NULL',
+        now(), token.user_id, token.email);
+      if (!updated.changes) invalidAccountLink();
+      await accountTokens.invalidate('verify', token.email);
+    });
+    return json(c, { ok: true });
+  });
+
+  app.post('/api/password/reset/request', async c => {
+    requireMailer();
+    limitAuth(c);
+    const data = await readBody(c.req.raw, 'json');
+    const email = accountEmail(data);
+    defer(async () => {
+      const user = await get<{ id: string }>('SELECT id FROM users WHERE email = ?', email);
+      if (user) await accountTokens.send('reset', email, user.id);
+    }, c);
+    return json(c, { ok: true }, 202);
+  });
+
+  app.post('/api/password/reset', async c => {
+    limitAuth(c);
+    const data = await readBody(c.req.raw, 'json');
+    const password = accountPassword(data);
+    if (!await accountTokens.find('reset', data.token)) invalidAccountLink();
+    const salt = randomBytes(16).toString('hex');
+    const key = await derive(password, salt);
+    await transaction(async () => {
+      const token = await accountTokens.find('reset', data.token);
+      if (!token?.user_id) invalidAccountLink();
+      const updated = await run('UPDATE users SET salt = ?, password_hash = ? WHERE id = ? AND email = ?',
+        salt, key.toString('hex'), token.user_id, token.email);
+      if (!updated.changes) invalidAccountLink();
+      await run('DELETE FROM sessions WHERE user_id = ?', token.user_id);
+      await accountTokens.invalidate('reset', token.email);
+    });
+    return json(c, { ok: true });
+  });
 
   app.post('/api/logout', async c => {
     await readBody(c.req.raw, 'json');
@@ -510,6 +671,53 @@ export async function createApi() {
     const emailAnnouncement = project.owner_id === user.id && project.requested_at ? await announcements.summary(id) : null;
     if (emailAnnouncement?.queued) schedule(announcements, 8, c);
     return json(c, { project, reviews, tickets, myReview: myReview ?? null, emailAnnouncement });
+  });
+
+  app.get('/api/projects/:id/android-testers', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const project = await projectFor(c.req.param('id'), user);
+    if (!project.platforms.includes('android')) fail(404, 'Este projeto não oferece teste Android.');
+    if (project.owner_id !== user.id) {
+      const share = await get('SELECT 1 FROM android_test_shares WHERE project_id = ? AND tester_id = ?', project.id, user.id);
+      return json(c, { testers: [], sharedByMe: Boolean(share) });
+    }
+    const rows = await all<Omit<AndroidTester, 'shared'> & { visibility: number }>(`SELECT u.id, u.name, u.android_test_email AS email,
+      u.android_test_email_public AS visibility FROM users u
+      LEFT JOIN android_test_shares s ON s.tester_id = u.id AND s.project_id = ?
+      WHERE u.id <> ? AND u.android_test_email IS NOT NULL AND (u.android_test_email_public = 1 OR s.project_id IS NOT NULL)
+      ORDER BY u.name, u.id`, project.id, user.id);
+    const testers: AndroidTester[] = rows.map(({ visibility, ...tester }) => ({ ...tester, shared: visibility === 0 }));
+    return json(c, { testers, sharedByMe: false });
+  });
+
+  app.post('/api/projects/:id/android-testers/share', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const data = await readBody(c.req.raw, 'json');
+    const share = data.share;
+    if (typeof share !== 'boolean') fail(400, 'Informe se deseja compartilhar o e-mail.');
+    await transaction(async () => {
+      const project = await projectFor(c.req.param('id'), user);
+      if (!project.platforms.includes('android') || project.owner_id === user.id) fail(403, 'Compartilhamento indisponível para este projeto.');
+      if (!share) {
+        await run('DELETE FROM android_test_shares WHERE project_id = ? AND tester_id = ?', project.id, user.id);
+        return;
+      }
+      const contact = await get<{ android_test_email: string | null; android_test_email_public: number }>(
+        'SELECT android_test_email, android_test_email_public FROM users WHERE id = ?', user.id);
+      if (!contact?.android_test_email || contact.android_test_email_public) {
+        fail(409, 'Salve um e-mail de teste Android privado no seu perfil.');
+      }
+      const inserted = await run(`INSERT INTO android_test_shares (project_id, tester_id) VALUES (?, ?)
+        ON CONFLICT(project_id, tester_id) DO NOTHING`, project.id, user.id);
+      if (inserted.changes) {
+        await run(`INSERT INTO notifications (id, recipient_id, project_id, actor_id, created_at) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(recipient_id, project_id, actor_id) DO UPDATE SET created_at = excluded.created_at, read_at = NULL`,
+          randomUUID(), project.owner_id, project.id, user.id, now());
+      }
+    });
+    return json(c, { sharedByMe: share });
   });
 
   app.get('/api/projects/:id/cover', async c => {

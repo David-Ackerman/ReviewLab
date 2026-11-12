@@ -33,7 +33,7 @@ O comando de build valida a configuração e compila `@reviewlab/web` pelo Turbo
 | `APP_ORIGIN` | Opcional. Em produção, o app usa o endereço estável `vercel.app` do projeto. Em preview, usa a URL desse deploy. Preencha apenas quando precisar definir outra origem HTTPS. |
 | `WHATSAPP_GROUP_URL` | Opcional. Link do convite do grupo. |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Use `1` para instalar com a versão de pnpm fixada no monorepo. |
-| `RESEND_API_KEY` e `RESEND_FROM_EMAIL` | Opcionais. Chave de envio do Resend e endereço do remetente. Configure no ambiente que pode enviar avisos reais. |
+| `RESEND_API_KEY` e `RESEND_FROM_EMAIL` | Necessárias para novos cadastros, verificação de e-mail, recuperação de senha e avisos de review. |
 | `GEMINI_API_KEY` | Opcional. Use um projeto gratuito para habilitar triagem de texto e imagem. |
 
 Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Vercel.
@@ -42,7 +42,7 @@ Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Ve
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-O build valida as variáveis obrigatórias e seus formatos quando executado na Vercel. Deixe as integrações opcionais vazias no primeiro deploy. Para enviar avisos aos testadores, verifique um domínio remetente no Resend.
+O build valida as variáveis obrigatórias da infraestrutura e seus formatos quando executado na Vercel. Configure o Resend antes de abrir o cadastro. Para enviar a qualquer endereço, verifique um domínio remetente no Resend.
 
 4. O botão **Deploy** da importação publica a branch selecionada conforme a configuração de produção do projeto. Para testar um preview antes de abrir o piloto, configure o projeto e use uma branch diferente da branch de produção ou a CLI, a partir da raiz do monorepo.
 
@@ -68,6 +68,8 @@ O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` e
 4. Em uma conta de teste do ReviewLab, ative os avisos no perfil e selecione uma plataforma. Em outra conta, crie um projeto novo nessa plataforma e clique em **Solicitar review**. Consulte **Avisos por e-mail** na página do projeto e confirme a entrega no painel **Emails** do Resend e na caixa de entrada.
 
 Para testar sem domínio próprio, use `RESEND_FROM_EMAIL=onboarding@resend.dev` em um ambiente de teste. Use como destinatário do ReviewLab o mesmo endereço cadastrado na sua conta do Resend. Esse remetente permite enviar apenas para esse endereço. [Domínio de teste do Resend](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
+
+Valide também o cadastro e a recuperação de senha com esse endereço. Uma conta existente pode solicitar um link em **Meu perfil**. Os links de cadastro e verificação expiram em 24 horas. O de recuperação de senha expira em 30 minutos e encerra as sessões anteriores após o uso. Mantenha o rastreamento de cliques desligado no domínio remetente usado para links de conta.
 
 Se aparecer **Nenhum testador inscrito**, confira o consentimento, a plataforma e se o destinatário é outra conta. Se o Resend recusar um envio, confira o status HTTP nos logs do servidor e o painel do provedor. A fila respeita `Retry-After` em respostas HTTP 429. Uma resposta sem confirmação fica registrada como incerta, pois o provedor pode ter recebido o pedido. A fila expira avisos pendentes após 48 horas.
 

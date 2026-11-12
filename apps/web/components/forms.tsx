@@ -67,7 +67,7 @@ const testerHints: Record<Platform, string> = {
   ios: 'iPhone, iPad ou TestFlight',
 };
 
-function PlatformChoices({ title, hint, selected, onChange }: {
+export function PlatformChoices({ title, hint, selected, onChange }: {
   title: string; hint: string; selected?: Platform[]; onChange?: (platform: Platform, checked: boolean) => void;
 }) {
   const id = useId();
@@ -93,7 +93,7 @@ function PlatformChoices({ title, hint, selected, onChange }: {
   </fieldset>;
 }
 
-function CheckField({ name, children, defaultChecked, checked, onChange, disabled }: {
+export function CheckField({ name, children, defaultChecked, checked, onChange, disabled }: {
   name: string; children: ReactNode; defaultChecked?: boolean; checked?: boolean; onChange?: (checked: boolean) => void; disabled?: boolean;
 }) {
   const id = useId();
@@ -106,49 +106,6 @@ function CheckField({ name, children, defaultChecked, checked, onChange, disable
 
 const fieldClass = 'grid min-w-0 gap-1.5 text-sm font-semibold';
 const hintClass = 'text-xs font-normal text-muted-foreground';
-
-export function AccountForm({ mode, session, toggle, onSave }: {
-  mode: 'login' | 'register' | 'profile'; session: Session; toggle: () => void; onSave: (session: Session) => void;
-}) {
-  const profile = mode === 'profile';
-  const login = mode === 'login';
-  const user = profile ? session.user : null;
-  async function submit(data: FormData) {
-    await api('/api/' + mode, {
-      ...Object.fromEntries(data), platforms: data.getAll('platforms'),
-      announcement_emails: data.has('announcement_emails'),
-    });
-    onSave(await api<Session>('/api/session'));
-  }
-
-  return <SubmitForm onSubmit={submit}>
-    {!login && <label className={fieldClass}>Nome<Input name="name" autoComplete="name" maxLength={80} defaultValue={user?.name} required /></label>}
-    {!profile && <>
-      <label className={fieldClass}>E-mail<Input name="email" autoComplete="email" type="email" maxLength={254} required /></label>
-      <div className={fieldClass}>
-        <label htmlFor="account-password">Senha</label>
-        {!login && <small id="password-hint" className={hintClass}>Use pelo menos 8 caracteres.</small>}
-        <Input id="account-password" name="password" autoComplete={login ? 'current-password' : 'new-password'} type="password" minLength={8} maxLength={128}
-          aria-describedby={login ? undefined : 'password-hint'} required />
-      </div>
-    </>}
-    {!login && <>
-      <PlatformChoices title="Onde você consegue testar?" hint="Marque todas as plataformas que você consegue testar." selected={user?.platforms ?? ['web']} />
-      <div className="rounded-lg bg-muted p-3">
-        <CheckField name="announcement_emails" defaultChecked={user?.announcement_emails}>
-          Receber pedidos de review por e-mail para as plataformas que eu testo.
-        </CheckField>
-        {!session.emailAnnouncementsEnabled && <p className="mt-2 text-xs text-muted-foreground">
-          O envio está indisponível. Você pode salvar sua preferência mesmo assim.
-        </p>}
-      </div>
-    </>}
-    <div className="flex flex-wrap gap-2 pt-1">
-      <Button>{login ? 'Entrar' : profile ? 'Salvar perfil' : 'Criar conta'}</Button>
-      {!profile && <Button variant="ghost" type="button" onClick={toggle}>{login ? 'Criar uma conta' : 'Já tenho conta'}</Button>}
-    </div>
-  </SubmitForm>;
-}
 
 export function ProjectForm({ project, session, onSave }: { project?: Project; session: Session; onSave: (id: string) => void }) {
   const [selected, setSelected] = useState<Platform[]>(project?.platforms ?? ['web']);

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone, Users } from 'lucide-react';
 import {
   platformLabels, projectStatusLabels, reportLabels, ticketStatusLabels,
   type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
@@ -9,10 +9,11 @@ import { SubmitForm } from './forms';
 import { cn } from '../lib/utils';
 import { Button, buttonVariants } from './ui/button';
 import { NativeSelect } from './ui/input';
+import { AndroidTesters } from './android-testers';
 
-const panel = 'min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6';
-const panelTitle = 'flex items-center gap-2 text-xl font-bold tracking-tight [&>svg]:shrink-0 [&>svg]:text-primary';
-const emptyPanel = 'mt-4 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground [&>svg]:shrink-0';
+const panel = 'min-w-0 rounded-lg border border-border bg-card p-4 sm:p-5';
+const panelTitle = 'flex items-center gap-2 text-lg font-semibold tracking-tight [&>svg]:shrink-0 [&>svg]:text-muted-foreground';
+const emptyPanel = 'mt-4 flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground [&>svg]:shrink-0';
 const entry = 'mt-4 grid scroll-mt-4 gap-2 border-t border-border pt-4';
 const textLink = 'inline-flex items-center gap-1 wrap-anywhere text-primary underline underline-offset-2 [&>svg]:shrink-0';
 const prose = 'text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap';
@@ -21,24 +22,16 @@ export function PlatformTags({ platforms }: { platforms: Platform[] }) {
   return <ul className="flex flex-wrap gap-1.5" aria-label="Plataformas">
     {platforms.map(platform => {
       const Icon = platform === 'web' ? Monitor : Smartphone;
-      return <li key={platform} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+      return <li key={platform} className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
         <Icon size={13} aria-hidden />{platformLabels[platform]}
       </li>;
     })}
   </ul>;
 }
 
-const statusColors: Record<string, string> = {
-  review: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200',
-  working: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200',
-  dev: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
-  open: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
-  prod: 'bg-primary/12 text-primary',
-  fixed: 'bg-primary/12 text-primary',
-};
-
 export function StatusTag({ state, label }: { state: string; label: string }) {
-  return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', statusColors[state] ?? 'bg-muted text-muted-foreground')}>
+  const inProgress = state === 'review' || state === 'working';
+  return <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs leading-none font-medium', inProgress ? 'bg-primary-muted text-primary' : 'bg-muted text-muted-foreground')}>
     <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />{label}
   </span>;
 }
@@ -47,8 +40,8 @@ export function ProjectCover({ project, version, className }: { project: Project
   const suffix = version ? '?v=' + version : '';
   return <div className={cn('relative grid aspect-[2/1] shrink-0 place-items-center overflow-hidden border-b border-border bg-muted', className)}>
     {project.has_cover ? <img className="absolute inset-0 size-full object-cover" src={projectApi(project.id) + '/cover' + suffix} alt="" loading={version === undefined ? 'lazy' : undefined} />
-      : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--color-primary)_35%,transparent)_0.8px,transparent_0.8px)] bg-size-[15px_15px]" aria-hidden>
-        <span className="grid size-16 place-items-center rounded-2xl border border-border bg-card text-xl font-bold tracking-tight text-primary shadow-sm">
+      : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--input)_65%,transparent)_0.7px,transparent_0.7px)] bg-size-[14px_14px]" aria-hidden>
+        <span className="grid size-11 place-items-center rounded-md border border-border bg-card text-base font-semibold tracking-tight text-foreground">
           {project.name.trim().slice(0, 2).toLocaleUpperCase('pt-BR')}
         </span>
       </div>}
@@ -137,8 +130,8 @@ function AnnouncementStatus({ summary, onRefresh }: { summary: AnnouncementSumma
     { label: 'Cancelados', value: cancelled },
   ].filter(item => item.value > 0);
 
-  return <section className="rounded-xl border border-border bg-muted/50 p-3.5">
-    <h2 className="flex items-center gap-2 text-sm font-semibold"><Mail size={16} className="text-primary" aria-hidden />Avisos por e-mail</h2>
+  return <section className={panel}>
+    <h2 className="flex items-center gap-2 text-sm font-semibold"><Mail size={16} className="text-muted-foreground" aria-hidden />Avisos por e-mail</h2>
     <div aria-live="polite">
       {!enabled && <p className="mt-1.5 text-sm text-muted-foreground">O envio está indisponível.</p>}
       {counts.length ? <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -156,6 +149,7 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
 }) {
   const { project, reviews, tickets, myReview, emailAnnouncement } = detail;
   const owner = session.user?.id === project.owner_id;
+  const android = project.platforms.includes('android');
   const statuses: Partial<Record<ProjectStatus, string>> = project.requested_at ? projectStatusLabels : {
     dev: projectStatusLabels.dev, prod: projectStatusLabels.prod,
   };
@@ -167,28 +161,44 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
   };
 
   return <>
-    <Link className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline" href={owner ? '/?meus' : '/'}><ArrowLeft size={16} aria-hidden /> Voltar aos projetos</Link>
-    <section className={cn(panel, 'grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-7')}>
+    <Link className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:underline" href={owner ? '/?meus' : '/'}><ArrowLeft size={16} aria-hidden /> Voltar aos projetos</Link>
+    <header className="grid min-w-0 gap-4 border-b border-border pb-5 sm:pb-6">
+      <div className="flex flex-wrap items-center gap-2"><PlatformTags platforms={project.platforms} />
+        <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
+      </div>
+      <div>
+        <h1 className="text-3xl leading-tight font-semibold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
+        <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <a className={buttonVariants({ variant: owner && project.requested_at ? 'default' : 'outline' })} href={project.url} target="_blank" rel="noreferrer">
+          Abrir projeto <ArrowUpRight size={16} aria-hidden />
+        </a>
+        {owner && <Button variant="outline" onClick={onEdit}><Pencil size={15} aria-hidden />Editar</Button>}
+        {owner && android && <a className={buttonVariants({ variant: 'outline' })} href="#testadores-android"><Users size={16} aria-hidden />Testadores Android</a>}
+        {owner && project.requested_at && <Button variant="outline" onClick={shareLink}><MessageSquare size={16} aria-hidden />Compartilhar no WhatsApp</Button>}
+        {!owner && project.requested_at && <Button onClick={onReview}><MessageSquare size={16} aria-hidden />
+          {myReview ? 'Editar review ou relatar bug' : 'Enviar review'}
+        </Button>}
+      </div>
+    </header>
+    <div className={cn('mt-5 grid items-start gap-4', owner && 'xl:grid-cols-[minmax(0,1fr)_18rem]')}>
       <div className="grid min-w-0 gap-4">
-        <div className="flex flex-wrap items-center gap-2"><PlatformTags platforms={project.platforms} />
-          <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
-        </div>
-        <div>
-          <h1 className="text-3xl leading-tight font-bold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
-          <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
-        </div>
-        <p className={prose}>{project.description}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <a className={buttonVariants({ variant: 'outline' })} href={project.url} target="_blank" rel="noreferrer">
-            Abrir projeto <ArrowUpRight size={16} aria-hidden />
-          </a>
-          {owner && <Button variant="outline" onClick={onEdit}><Pencil size={15} aria-hidden />Editar</Button>}
-          {owner && project.requested_at && <Button variant="outline" onClick={shareLink}><MessageSquare size={16} aria-hidden />Compartilhar no WhatsApp</Button>}
-          {!owner && project.requested_at && <Button onClick={onReview}><MessageSquare size={16} aria-hidden />
-            {myReview ? 'Editar review ou relatar bug' : 'Enviar review'}
-          </Button>}
-        </div>
-        {owner && !project.requested_at && <div className="rounded-xl border border-border bg-muted/50 p-3.5">
+        {project.has_cover ? <ProjectCover project={project} version={version} className="aspect-[2/1] rounded-lg border" /> : null}
+        <section className={cn(panel, 'grid gap-2')}>
+          <h2 className={panelTitle}>Sobre o projeto</h2>
+          <p className={prose}>{project.description}</p>
+        </section>
+        {android && <div id="testadores-android" className="min-w-0 scroll-mt-5">
+          <AndroidTesters project={project} session={session} />
+        </div>}
+        {project.instructions && <section className={cn(panel, 'grid gap-3')}>
+          <h2 className={panelTitle}><ClipboardList size={19} aria-hidden />Como testar</h2>
+          <p className={prose}>{project.instructions}</p>
+        </section>}
+      </div>
+      {owner && <aside className="grid min-w-0 gap-4" aria-label="Gerenciamento do projeto">
+        {!project.requested_at && <section className={panel}>
           <SubmitForm inline onSubmit={async () => {
             await api(projectApi(project.id) + '/request', {});
             onChange('Pedido de review publicado.');
@@ -198,17 +208,12 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
               ? 'Envia um aviso aos testadores inscritos em pelo menos uma das plataformas do projeto.'
               : 'O pedido aparece no catálogo. Os avisos por e-mail estão indisponíveis.'}</p>
           </SubmitForm>
-        </div>}
+        </section>}
         {emailAnnouncement && <AnnouncementStatus summary={emailAnnouncement} onRefresh={() => onChange()} />}
-        {owner && <StatusForm path={projectApi(project.id)} status={project.status} labels={statuses} label="Status do projeto" onChange={onChange} />}
-      </div>
-      <ProjectCover project={project} version={version} className="order-first aspect-video rounded-xl border lg:order-last" />
-    </section>
-    {project.instructions && <section className={cn(panel, 'mt-4 grid gap-3')}>
-      <h2 className={panelTitle}><ClipboardList size={19} aria-hidden />Como testar</h2>
-      <p className={prose}>{project.instructions}</p>
-    </section>}
-    <div className={cn('mt-4 grid items-start gap-4', (owner || tickets.length > 0) && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]')}>
+        <section className={panel}><StatusForm path={projectApi(project.id)} status={project.status} labels={statuses} label="Status do projeto" onChange={onChange} /></section>
+      </aside>}
+    </div>
+    <div className={cn('mt-4 grid items-start gap-4', (owner || tickets.length > 0) && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]')}>
       <section className={panel}>
         <h2 className={panelTitle}><MessageSquare size={19} aria-hidden />Reviews <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{reviews.length}</span></h2>
         {reviews.length ? reviews.map(review => <article className={entry} key={review.id} id={'review-' + review.id}>
