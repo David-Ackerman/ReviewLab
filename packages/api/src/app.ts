@@ -12,7 +12,8 @@ import { createMailer } from './mailer.ts';
 import { createAccountTokens } from './account-tokens.ts';
 import { createStorage, mediaType, cleanFilename, uploadIdPattern } from './storage.ts';
 import { accountDestination, platformLabels, projectStatusLabels, ticketStatusLabels } from './contracts.ts';
-import type { AndroidTester, Attachment, Notification, Platform, Project, Review, Ticket, TicketEvent, User } from './contracts.ts';
+import { handleMcp, readProjectCursor, type ProjectCursor } from './mcp.ts';
+import type { AndroidTester, Attachment, McpToken, Notification, Platform, Project, Review, Ticket, TicketEvent, User } from './contracts.ts';
 
 type UserRecord = Omit<User, 'platforms' | 'announcement_emails' | 'email_verified' | 'android_test_email_public'> & {
   platforms: string; announcement_emails: number; email_verified_at: string | null; android_test_email_public: number;
@@ -170,6 +171,7 @@ export async function createApi() {
         fail(403, 'Origem inválida.');
       }
     }
+    if (c.req.path === '/api/mcp') return await next();
     c.set('user', await userFor(c));
     await next();
   });
@@ -195,8 +197,7 @@ export async function createApi() {
     return { name, chosen };
   }
 
-  async function projectInput(req: Request, user: UserRecord, project?: Project) {
-    const form = await readBody(req, 'form');
+  async function projectInput(form: FormData, userId: string, project?: Project) {
     const name = field(form, 'name', 'nome', 100, true);
     const selection = form.has('platforms') ? form.getAll('platforms')
       : form.has('platform') ? [form.get('platform')] : project?.platforms ?? ['web'];
@@ -206,12 +207,18 @@ export async function createApi() {
     const description = field(form, 'description', 'descrição', 1600, true);
     const url = projectUrl(field(form, 'url', 'link', 2048, true));
     const instructions = field(form, 'instructions', 'instruções de teste', 2000, chosen.some(platform => platform !== 'web'));
+    const goalInput = form.get('review_goal');
+    const reviewGoal = goalInput === null ? project?.review_goal ?? 1 : Number(goalInput);
+    if (goalInput !== null && (typeof goalInput !== 'string' || !/^\d{1,4}$/.test(goalInput.trim()))
+      || !Number.isInteger(reviewGoal) || reviewGoal < 1 || reviewGoal > 1000) {
+      fail(400, 'Informe uma meta de 1 a 1000 reviews.');
+    }
     const cover = storage && form.has('cover_id')
-      ? await storage.verify(form.get('cover_id'), user.id, project?.id || '', 'cover')
+      ? await storage.verify(form.get('cover_id'), userId, project?.id || '', 'cover')
       : await image(form, 'cover');
     const removeCover = form.get('remove_cover') === 'yes';
     if (cover.bytes && removeCover) fail(400, 'Escolha entre trocar ou remover a imagem de capa.');
-    return { name, chosen, description, url, instructions, cover, removeCover };
+    return { name, chosen, description, url, instructions, cover, removeCover, reviewGoal };
   }
 
   async function image(form: FormData, key: string): Promise<Media> {
@@ -308,7 +315,7 @@ export async function createApi() {
     if (resource.owner_id !== user.id) fail(403, 'Apenas o dono pode alterar este item.');
   }
 
-  const projectFields = `p.id, p.name, p.platform, p.platforms, p.description, p.url, p.instructions, p.status, p.requested_at,
+  const projectFields = `p.id, p.name, p.platform, p.platforms, p.description, p.url, p.instructions, p.status, p.requested_at, p.review_goal,
     p.created_at, p.owner_id, u.name AS owner, p.cover IS NOT NULL AS has_cover,
     (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id) AS review_count`;
 
@@ -409,6 +416,90 @@ export async function createApi() {
     return json(c, { user: publicUser(user), whatsappGroup: user ? whatsappGroup : null,
       appOrigin, aiEnabled, emailAnnouncementsEnabled: announcements.enabled,
       directUploads: Boolean(storage), unreadNotifications: user ? await unreadNotifications(user.id) : 0 });
+  });
+
+  app.get('/api/mcp-tokens', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const rows = await all<{ id: string; label: string; can_create: number; created_at: string; expires: number }>(
+      'SELECT id, label, can_create, created_at, expires FROM mcp_tokens WHERE user_id = ? AND expires > ? ORDER BY created_at DESC',
+      user.id, Date.now());
+    const tokens: McpToken[] = rows.map(row => ({
+      id: row.id, label: row.label, canCreate: Boolean(row.can_create), createdAt: row.created_at, expiresAt: row.expires,
+    }));
+    return json(c, { tokens });
+  });
+
+  app.post('/api/mcp-tokens', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    const data = await readBody(c.req.raw, 'json');
+    const label = field(data, 'label', 'nome da chave', 60, true);
+    const secret = 'rl_mcp_' + randomBytes(32).toString('hex');
+    const token: McpToken = { id: randomUUID(), label, canCreate: data.canCreate === true, createdAt: now(), expiresAt: Date.now() + 90 * 86_400_000 };
+    await transaction(async () => {
+      const session = sessionToken(c);
+      if (!session || !await get('SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = ? AND expires > ?', hash(session), user.id, Date.now())) {
+        fail(401, 'Entre na sua conta para continuar.');
+      }
+      await run('DELETE FROM mcp_tokens WHERE expires <= ?', Date.now());
+      const current = await get<{ total: number }>('SELECT COUNT(*) AS total FROM mcp_tokens WHERE user_id = ?', user.id);
+      if ((current?.total ?? 0) >= 10) fail(409, 'Revogue uma das suas chaves antes de criar outra.');
+      await run(`INSERT INTO mcp_tokens (id, token_hash, user_id, label, can_create, created_at, expires)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, token.id, hash(secret), user.id, token.label, Number(token.canCreate), token.createdAt, token.expiresAt);
+    });
+    return json(c, { token, secret }, 201);
+  });
+
+  app.post('/api/mcp-tokens/:id/revoke', async c => {
+    const user = c.get('user');
+    requireUser(user);
+    await readBody(c.req.raw, 'json');
+    await run('DELETE FROM mcp_tokens WHERE id = ? AND user_id = ?', c.req.param('id'), user.id);
+    return json(c, { ok: true });
+  });
+
+  async function listMcpProjects(userId: string, mine: boolean, cursor: ProjectCursor | null, limit: number) {
+    const order = mine ? 'p.created_at' : 'p.requested_at';
+    const scope = mine ? 'p.owner_id = ?' : 'p.requested_at IS NOT NULL';
+    const params: (string | number)[] = mine ? [userId] : [];
+    if (cursor) params.push(cursor.timestamp, cursor.timestamp, cursor.id);
+    const projects = await all<ProjectRecord>(`SELECT ${projectFields}
+      FROM projects p JOIN users u ON u.id = p.owner_id WHERE ${scope}
+      ${cursor ? `AND (${order} < ? OR (${order} = ? AND p.id < ?))` : ''}
+      ORDER BY ${order} DESC, p.id DESC LIMIT ?`, ...params, limit);
+    return projects.map(publicProject);
+  }
+
+  app.on(['GET', 'POST', 'DELETE'], '/api/mcp', async c => {
+    const origin = c.req.header('origin');
+    if (origin && origin !== appOrigin && origin !== new URL(c.req.url).origin) fail(403, 'Origem inválida.');
+    const secret = /^Bearer (rl_mcp_[a-f0-9]{64})$/i.exec(c.req.header('authorization') ?? '')?.[1];
+    const access = secret && await get<{ user_id: string; can_create: number }>(
+      'SELECT user_id, can_create FROM mcp_tokens WHERE token_hash = ? AND expires > ?', hash(secret), Date.now());
+    if (!access) {
+      c.header('WWW-Authenticate', 'Bearer realm="ReviewLab MCP"');
+      return json(c, { error: 'Use uma chave MCP ativa do ReviewLab.' }, 401);
+    }
+    if (c.req.method !== 'POST') {
+      c.header('Allow', 'POST');
+      return c.body(null, 405);
+    }
+    return handleMcp(c.req.raw, {
+      canCreate: Boolean(access.can_create),
+      create: form => createProject(form, access.user_id),
+      list: (mine, cursor, limit) => listMcpProjects(access.user_id, mine, cursor, limit),
+      progress: async id => {
+        const row = await get<ProjectRecord>(`SELECT ${projectFields}
+          FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = ? AND p.owner_id = ?`, id, access.user_id);
+        if (row) return publicProject(row);
+      },
+      onError: error => {
+        if (error instanceof HttpError) return error.message;
+        console.error('Falha em ferramenta do ReviewLab MCP:', error instanceof Error ? error.name : 'erro desconhecido');
+        return 'Não foi possível concluir a operação.';
+      },
+    });
   });
 
   app.get('/api/notifications/count', async c => {
@@ -601,6 +692,7 @@ export async function createApi() {
         salt, key.toString('hex'), token.user_id, token.email);
       if (!updated.changes) invalidAccountLink();
       await run('DELETE FROM sessions WHERE user_id = ?', token.user_id);
+      await run('DELETE FROM mcp_tokens WHERE user_id = ?', token.user_id);
       await accountTokens.invalidate('reset', token.email);
     });
     return json(c, { ok: true });
@@ -628,18 +720,22 @@ export async function createApi() {
     return json(c, { projects: projects.map(publicProject) });
   });
 
+  async function createProject(form: FormData, ownerId: string) {
+    const id = randomUUID();
+    const { name, chosen, description, url, instructions, cover, reviewGoal } = await projectInput(form, ownerId);
+    await transaction(async () => {
+      await storage?.consume(cover);
+      await run(`INSERT INTO projects (id, owner_id, name, platform, platforms, description, url, instructions, status, cover, cover_type, cover_path, created_at, review_goal)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'dev', ?, ?, ?, ?, ?)`,
+        id, ownerId, name, chosen[0], JSON.stringify(chosen), description, url, instructions, cover.bytes, cover.type, cover.path ?? null, now(), reviewGoal);
+    });
+    return id;
+  }
+
   app.post('/api/projects', async c => {
     const user = c.get('user');
     requireUser(user);
-    const id = randomUUID();
-    const { name, chosen, description, url, instructions, cover } = await projectInput(c.req.raw, user);
-    await transaction(async () => {
-      await storage?.consume(cover);
-      await run(`INSERT INTO projects (id, owner_id, name, platform, platforms, description, url, instructions, status, cover, cover_type, cover_path, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'dev', ?, ?, ?, ?)`,
-        id, user.id, name, chosen[0], JSON.stringify(chosen), description, url, instructions, cover.bytes, cover.type, cover.path ?? null, now());
-    });
-    return json(c, { id }, 201);
+    return json(c, { id: await createProject(await readBody(c.req.raw, 'form'), user.id) }, 201);
   });
 
   app.get('/api/projects/:id', async c => {
@@ -735,11 +831,11 @@ export async function createApi() {
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     requireOwner(project, user);
-    const { name, chosen, description, url, instructions, cover, removeCover } = await projectInput(c.req.raw, user, project);
+    const { name, chosen, description, url, instructions, cover, removeCover, reviewGoal } = await projectInput(await readBody(c.req.raw, 'form'), user.id, project);
     let previousCover: string | null | undefined;
     await transaction(async () => {
-      await run('UPDATE projects SET name = ?, platform = ?, platforms = ?, description = ?, url = ?, instructions = ? WHERE id = ?',
-        name, chosen[0], JSON.stringify(chosen), description, url, instructions, id);
+      await run('UPDATE projects SET name = ?, platform = ?, platforms = ?, description = ?, url = ?, instructions = ?, review_goal = ? WHERE id = ?',
+        name, chosen[0], JSON.stringify(chosen), description, url, instructions, reviewGoal, id);
       if (cover.bytes || removeCover) {
         previousCover = (await get<{ cover_path: string | null }>('SELECT cover_path FROM projects WHERE id = ?', id))?.cover_path;
         await storage?.consume(cover);

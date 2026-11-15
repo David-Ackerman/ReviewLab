@@ -14,7 +14,7 @@ import { WorkspaceShell } from './ui/workspace-shell';
 
 type Dialog = 'new' | 'edit' | 'review';
 const dialogs: Record<Dialog, { title: string; description: string }> = {
-  new: { title: 'Cadastrar projeto', description: 'Informe o que sua comunidade pode testar.' },
+  new: { title: 'Cadastrar projeto', description: 'Salve um rascunho e publique em Explorar quando estiver pronto para receber reviews.' },
   edit: { title: 'Editar projeto', description: 'Atualize as informações e instruções de teste.' },
   review: { title: 'Enviar review', description: 'Conte como foi o teste e relate bugs que encontrou.' },
 };
@@ -89,7 +89,10 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
             </div>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <PlatformTags platforms={project.platforms} />
-              <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                {!project.requested_at && <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Rascunho</span>}
+                <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
+              </div>
             </div>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
               <span className="flex min-w-0 items-center gap-1.5 wrap-anywhere"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted font-semibold text-foreground" aria-hidden>{project.owner.slice(0, 1).toUpperCase()}</span>{project.owner}</span>
@@ -101,7 +104,7 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
       </article>)}</div> : <div className={emptyState}>
         <div className={emptyIcon}><FolderOpen size={22} aria-hidden /></div>
         <h3 className="text-base font-semibold">{filtered ? 'Nenhum projeto encontrado' : mine ? 'Você ainda não cadastrou projetos' : 'Nenhum projeto anunciado'}</h3>
-        <p className="max-w-md text-sm text-muted-foreground">{filtered ? 'Tente outro termo ou remova os filtros.' : mine ? 'Cadastre um projeto para organizar suas reviews e tickets.' : 'Os projetos aparecem aqui quando alguém solicita uma review.'}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{filtered ? 'Tente outro termo ou remova os filtros.' : mine ? 'Cadastre um projeto para organizar suas reviews e tickets.' : 'Os projetos aparecem aqui depois que o dono publica um pedido de review.'}</p>
         {filtered && <Button variant="outline" onClick={() => { setQuery(''); setPlatform(''); setStatus(''); }}>Limpar filtros</Button>}
       </div>}
     </section>

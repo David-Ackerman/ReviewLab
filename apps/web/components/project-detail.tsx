@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone, Users } from 'lucide-react';
 import {
-  platformLabels, projectStatusLabels, reportLabels, ticketStatusLabels,
+  platformLabels, projectStatusLabels, reportLabels, reviewsRemaining, ticketStatusLabels,
   type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
 } from '@reviewlab/api/contracts';
 import { api, formatDate, projectApi } from '../lib/client';
@@ -150,6 +150,7 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
   const { project, reviews, tickets, myReview, emailAnnouncement } = detail;
   const owner = session.user?.id === project.owner_id;
   const android = project.platforms.includes('android');
+  const remaining = reviewsRemaining(project);
   const statuses: Partial<Record<ProjectStatus, string>> = project.requested_at ? projectStatusLabels : {
     dev: projectStatusLabels.dev, prod: projectStatusLabels.prod,
   };
@@ -170,6 +171,18 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
         <h1 className="text-3xl leading-tight font-semibold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
         <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
       </div>
+      {owner && !project.requested_at && <section className="grid gap-2 rounded-lg border border-border bg-muted p-4">
+        <p className="text-sm text-muted-foreground">
+          Este rascunho só aparece em <strong>Meus projetos</strong>. Publique para aparecer em <strong>Explorar</strong> e receber reviews.
+          {session.emailAnnouncementsEnabled && ' Testadores inscritos nas plataformas do projeto também podem receber um aviso por e-mail.'}
+        </p>
+        <SubmitForm inline onSubmit={async () => {
+          await api(projectApi(project.id) + '/request', {});
+          onChange('Projeto publicado em Explorar.');
+        }}>
+          <Button><MessageSquare size={16} aria-hidden />Publicar em Explorar</Button>
+        </SubmitForm>
+      </section>}
       <div className="flex flex-wrap items-center gap-2">
         <a className={buttonVariants({ variant: owner && project.requested_at ? 'default' : 'outline' })} href={project.url} target="_blank" rel="noreferrer">
           Abrir projeto <ArrowUpRight size={16} aria-hidden />
@@ -198,17 +211,6 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
         </section>}
       </div>
       {owner && <aside className="grid min-w-0 gap-4" aria-label="Gerenciamento do projeto">
-        {!project.requested_at && <section className={panel}>
-          <SubmitForm inline onSubmit={async () => {
-            await api(projectApi(project.id) + '/request', {});
-            onChange('Pedido de review publicado.');
-          }}>
-            <Button><MessageSquare size={16} aria-hidden />Solicitar review</Button>
-            <p className="w-full text-sm text-muted-foreground">{session.emailAnnouncementsEnabled
-              ? 'Envia um aviso aos testadores inscritos em pelo menos uma das plataformas do projeto.'
-              : 'O pedido aparece no catálogo. Os avisos por e-mail estão indisponíveis.'}</p>
-          </SubmitForm>
-        </section>}
         {emailAnnouncement && <AnnouncementStatus summary={emailAnnouncement} onRefresh={() => onChange()} />}
         <section className={panel}><StatusForm path={projectApi(project.id)} status={project.status} labels={statuses} label="Status do projeto" onChange={onChange} /></section>
       </aside>}
@@ -216,6 +218,9 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
     <div className={cn('mt-4 grid items-start gap-4', (owner || tickets.length > 0) && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]')}>
       <section className={panel}>
         <h2 className={panelTitle}><MessageSquare size={19} aria-hidden />Reviews <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{reviews.length}</span></h2>
+        {owner && <p className="mt-2 text-sm text-muted-foreground">
+          {project.review_count} de {project.review_goal} reviews · {remaining === 0 ? 'Meta atingida' : `Restam ${remaining} para a meta`}
+        </p>}
         {reviews.length ? reviews.map(review => <article className={entry} key={review.id} id={'review-' + review.id}>
           <div className="flex flex-wrap justify-between gap-2">
             <h3 className="font-semibold wrap-anywhere">{review.author}</h3>

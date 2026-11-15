@@ -7,6 +7,7 @@ import { ArrowUpRight, Bell, MailCheck } from 'lucide-react';
 import type { Notification, Session, User } from '@reviewlab/api/contracts';
 import { api, errorMessage, formatDate, projectPath } from '../lib/client';
 import { CheckField, PlatformChoices, SubmitForm } from './forms';
+import { McpSettings } from './mcp-settings';
 import { Button, buttonVariants } from './ui/button';
 import { Input } from './ui/input';
 import { WorkspaceShell } from './ui/workspace-shell';
@@ -102,6 +103,7 @@ function ProfileSettings({ session, onUpdate }: { session: SignedIn; onUpdate: (
       </SubmitForm>
       {saved && <p className="mt-3 text-sm font-medium text-primary" role="status">Perfil atualizado.</p>}
     </section>
+    <McpSettings />
   </div>;
 }
 

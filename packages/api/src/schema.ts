@@ -16,6 +16,12 @@ export async function migrate(db: Database) {
     );
     CREATE INDEX IF NOT EXISTS account_tokens_recipient ON account_tokens(purpose, email, created_at);
     CREATE INDEX IF NOT EXISTS account_tokens_expiry ON account_tokens(expires);
+    CREATE TABLE IF NOT EXISTS mcp_tokens (
+      id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id),
+      label TEXT NOT NULL, can_create INTEGER NOT NULL CHECK(can_create IN (0,1)),
+      created_at TEXT NOT NULL, expires BIGINT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS mcp_tokens_user ON mcp_tokens(user_id, expires);
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL,
       description TEXT NOT NULL, url TEXT NOT NULL, instructions TEXT NOT NULL,
@@ -63,10 +69,12 @@ export async function migrate(db: Database) {
     await db.addColumn('users', 'android_test_email_public', 'INTEGER NOT NULL DEFAULT 1 CHECK(android_test_email_public IN (0,1))');
     await db.addColumn('projects', 'platform', "TEXT NOT NULL DEFAULT 'web' CHECK(platform IN ('web','android','ios'))");
     await db.addColumn('projects', 'platforms', 'TEXT');
+    await db.addColumn('projects', 'review_goal', 'INTEGER NOT NULL DEFAULT 1 CHECK(review_goal BETWEEN 1 AND 1000)');
     await db.run(`UPDATE projects SET platforms = '["' || platform || '"]' WHERE platforms IS NULL`);
     await db.addColumn('tickets', 'retest_request_id', 'TEXT');
     await db.addColumn('projects', 'cover_path', 'TEXT');
     await db.addColumn('ticket_attachments', 'storage_path', 'TEXT');
-    await db.protectTables('users', 'sessions', 'account_tokens', 'projects', 'android_test_shares', 'notifications', 'reviews', 'tickets', 'ticket_events', 'ticket_attachments');
+    await db.run('CREATE INDEX IF NOT EXISTS projects_explore ON projects(requested_at DESC, id DESC) WHERE requested_at IS NOT NULL');
+    await db.protectTables('users', 'sessions', 'account_tokens', 'mcp_tokens', 'projects', 'android_test_shares', 'notifications', 'reviews', 'tickets', 'ticket_events', 'ticket_attachments');
   });
 }

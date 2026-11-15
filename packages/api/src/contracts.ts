@@ -57,8 +57,15 @@ export type Project = {
   owner: string;
   has_cover: boolean | number;
   review_count: number;
+  review_goal: number;
   pending_retests?: number;
 };
+
+export type McpToken = { id: string; label: string; canCreate: boolean; createdAt: string; expiresAt: number };
+
+export function reviewsRemaining(project: Pick<Project, 'review_goal' | 'review_count'>) {
+  return Math.max(0, project.review_goal - project.review_count);
+}
 
 export type Review = { id: string; author: string; feedback: string; created_at: string };
 export type Attachment = { id: string; name: string; type: string };

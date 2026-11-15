@@ -133,6 +133,10 @@ export function ProjectForm({ project, session, onSave }: { project?: Project; s
     <label className={fieldClass}>Descrição
       <Textarea name="description" maxLength={1600} rows={3} defaultValue={project?.description} placeholder="O que é o projeto e o que está pronto para testar?" required />
     </label>
+    <label className={fieldClass}>Meta de reviews
+      <Input className="max-w-32" name="review_goal" type="number" min={1} max={1000} step={1}
+        defaultValue={project?.review_goal ?? 1} required />
+    </label>
     <div className={fieldClass}>
       <label htmlFor="project-instructions">Instruções de teste{!mobile && ' (opcional)'}</label>
       <small className={hintClass} id="instructions-hint">{mobile
@@ -146,7 +150,7 @@ export function ProjectForm({ project, session, onSave }: { project?: Project; s
       <Input id="project-cover" name="cover" type="file" aria-describedby="cover-hint" accept={imageTypes} />
     </div>
     {Boolean(project?.has_cover) && <CheckField name="remove_cover">Remover a capa atual</CheckField>}
-    <div className="flex pt-1"><Button>{project ? 'Salvar alterações' : 'Cadastrar projeto'}</Button></div>
+    <div className="flex pt-1"><Button>{project ? 'Salvar alterações' : 'Salvar rascunho'}</Button></div>
   </SubmitForm>;
 }
 
