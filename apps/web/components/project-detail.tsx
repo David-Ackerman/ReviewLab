@@ -1,14 +1,16 @@
 import Link from 'next/link';
+import { useId } from 'react';
 import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone, Users } from 'lucide-react';
 import {
   platformLabels, projectStatusLabels, reportLabels, reviewsRemaining, ticketStatusLabels,
   type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
 } from '@reviewlab/api/contracts';
 import { api, formatDate, projectApi } from '../lib/client';
+import { projectOwnerLabel } from '../lib/locale';
 import { SubmitForm } from './forms';
 import { cn } from '../lib/utils';
 import { Button, buttonVariants } from './ui/button';
-import { NativeSelect } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { AndroidTesters } from './android-testers';
 
 const panel = 'min-w-0 rounded-lg border border-border bg-card p-4 sm:p-5';
@@ -22,17 +24,41 @@ export function PlatformTags({ platforms }: { platforms: Platform[] }) {
   return <ul className="flex flex-wrap gap-1.5" aria-label="Plataformas">
     {platforms.map(platform => {
       const Icon = platform === 'web' ? Monitor : Smartphone;
-      return <li key={platform} className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-        <Icon size={13} aria-hidden />{platformLabels[platform]}
+      return <li key={platform} className="inline-flex items-center gap-1 rounded-[5px] border border-border px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
+        <Icon size={12} aria-hidden />{platformLabels[platform]}
       </li>;
     })}
   </ul>;
 }
 
+type StatusShape = 'open' | 'progress' | 'done' | 'dashed';
+const statusTones: Record<string, { shape: StatusShape; className: string }> = {
+  open: { shape: 'open', className: 'bg-status-open-muted text-status-open' },
+  working: { shape: 'progress', className: 'bg-status-working-muted text-status-working' },
+  fixed: { shape: 'done', className: 'bg-status-done-muted text-status-done' },
+  unreproduced: { shape: 'dashed', className: 'bg-muted text-muted-foreground' },
+  dev: { shape: 'open', className: 'bg-muted text-muted-foreground' },
+  review: { shape: 'progress', className: 'bg-primary-muted text-primary-strong' },
+  prod: { shape: 'done', className: 'bg-status-done-muted text-status-done' },
+};
+
+// A forma do ícone repete a informação da cor para quem não distingue os tons.
+function StatusIcon({ shape }: { shape: StatusShape }) {
+  return <svg width="12" height="12" viewBox="0 0 12 12" className="shrink-0" aria-hidden>
+    {shape === 'done' ? <>
+      <circle cx="6" cy="6" r="5" fill="currentColor" />
+      <path d="M3.6 6.1l1.6 1.6 3.2-3.3" fill="none" stroke="var(--card)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </> : <>
+      <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray={shape === 'dashed' ? '2 1.6' : undefined} />
+      {shape === 'progress' && <path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor" />}
+    </>}
+  </svg>;
+}
+
 export function StatusTag({ state, label }: { state: string; label: string }) {
-  const inProgress = state === 'review' || state === 'working';
-  return <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs leading-none font-medium', inProgress ? 'bg-primary-muted text-primary' : 'bg-muted text-muted-foreground')}>
-    <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />{label}
+  const tone = statusTones[state] ?? statusTones.unreproduced;
+  return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs leading-none font-semibold', tone.className)}>
+    <StatusIcon shape={tone.shape} />{label}
   </span>;
 }
 
@@ -58,13 +84,20 @@ const eventLabels = {
 function StatusForm({ path, status, labels, label, onChange }: {
   path: string; status: string; labels: Record<string, string>; label: string; onChange: (message: string) => void;
 }) {
+  const id = useId();
   return <SubmitForm inline onSubmit={async data => {
     await api(path + '/status', { status: data.get('status') });
     onChange('Status atualizado.');
   }}>
-    <label className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">{label}<NativeSelect name="status" defaultValue={status} key={status}>
-      {Object.entries(labels).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-    </NativeSelect></label>
+    <div className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">
+      <label htmlFor={id}>{label}</label>
+      <Select name="status" defaultValue={status} key={status}>
+        <SelectTrigger id={id}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {Object.entries(labels).map(([value, text]) => <SelectItem key={value} value={value}>{text}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
     <Button variant="outline">Atualizar</Button>
   </SubmitForm>;
 }
@@ -169,11 +202,11 @@ export function ProjectView({ detail, session, version, onEdit, onReview, onChan
       </div>
       <div>
         <h1 className="text-3xl leading-tight font-semibold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
-        <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {project.owner} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
+        <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {projectOwnerLabel(project.owner, owner)} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
       </div>
       {owner && !project.requested_at && <section className="grid gap-2 rounded-lg border border-border bg-muted p-4">
         <p className="text-sm text-muted-foreground">
-          Este rascunho só aparece em <strong>Meus projetos</strong>. Publique para aparecer em <strong>Explorar</strong> e receber reviews.
+          Este rascunho só aparece para você. Publique para que outras pessoas encontrem o projeto em <strong>Explorar</strong> e enviem reviews.
           {session.emailAnnouncementsEnabled && ' Testadores inscritos nas plataformas do projeto também podem receber um aviso por e-mail.'}
         </p>
         <SubmitForm inline onSubmit={async () => {

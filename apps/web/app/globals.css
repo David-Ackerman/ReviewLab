@@ -4,6 +4,9 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans), "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -16,42 +19,65 @@
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-primary-muted: var(--primary-muted);
+  --color-primary-strong: var(--primary-strong);
+  --color-status-open: var(--status-open);
+  --color-status-open-muted: var(--status-open-muted);
+  --color-status-working: var(--status-working);
+  --color-status-working-muted: var(--status-working-muted);
+  --color-status-done: var(--status-done);
+  --color-status-done-muted: var(--status-done-muted);
 }
 
+/* Workbench: superfícies neutras de baixo brilho e um único acento violeta. */
 :root {
   color-scheme: light;
-  --background: #f7f7f8;
-  --foreground: #1b1b20;
+  --background: #f6f7f9;
+  --foreground: #16181d;
   --card: #ffffff;
-  --muted: #eeeeef;
-  --muted-foreground: #585861;
-  --primary: #5127cc;
+  --muted: #eeeff2;
+  --muted-foreground: #5b606b;
+  --primary: #5a3fd6;
   --primary-foreground: #fff;
-  --primary-muted: #eee8ff;
-  --border: #dedee2;
-  --input: #85858f;
-  --ring: #5127cc;
-  --destructive: #25252b;
+  --primary-muted: #efebff;
+  --primary-strong: #4128b0;
+  --border: #e2e4e9;
+  --input: #8a8f99;
+  --ring: #5a3fd6;
+  --destructive: #16181d;
+  --status-open: #9a3412;
+  --status-open-muted: #fff1e7;
+  --status-working: #1e40af;
+  --status-working-muted: #e8effe;
+  --status-done: #115e59;
+  --status-done-muted: #e3f5f2;
 }
 
 .dark {
   color-scheme: dark;
-  --background: #141416;
-  --foreground: #f1f1f3;
-  --card: #1b1b1f;
-  --muted: #27272c;
-  --muted-foreground: #b0b0ba;
-  --primary: #b29aff;
-  --primary-foreground: #231342;
-  --primary-muted: #2d2249;
-  --border: #35353d;
-  --input: #777781;
-  --ring: #b29aff;
-  --destructive: #f1f1f3;
+  --background: #0f1115;
+  --foreground: #e8eaee;
+  --card: #161920;
+  --muted: #1d2129;
+  --muted-foreground: #9aa1ad;
+  --primary: #a897ff;
+  --primary-foreground: #1a1240;
+  --primary-muted: #2a2550;
+  --primary-strong: #e2dbff;
+  --border: #2a2f39;
+  --input: #6b7280;
+  --ring: #a897ff;
+  --destructive: #e8eaee;
+  --status-open: #fdba74;
+  --status-open-muted: #3a2214;
+  --status-working: #93c5fd;
+  --status-working-muted: #172340;
+  --status-done: #5eead4;
+  --status-done-muted: #0f2f2c;
 }
 
 @layer base {
   body { @apply bg-background font-sans text-foreground antialiased; }
   button:not(:disabled), select:not(:disabled), summary { cursor: pointer; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+  kbd { @apply rounded-[5px] border border-b-2 border-border bg-background px-1.5 font-mono text-[11px] text-muted-foreground; }
 }

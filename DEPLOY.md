@@ -33,7 +33,7 @@ O comando de build valida a configuração e compila `@reviewlab/web` pelo Turbo
 | `APP_ORIGIN` | Opcional. Em produção, o app usa o endereço estável `vercel.app` do projeto. Em preview, usa a URL desse deploy. Preencha apenas quando precisar definir outra origem HTTPS. |
 | `WHATSAPP_GROUP_URL` | Opcional. Link do convite do grupo. |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Use `1` para instalar com a versão de pnpm fixada no monorepo. |
-| `RESEND_API_KEY` e `RESEND_FROM_EMAIL` | Necessárias para novos cadastros, verificação de e-mail, recuperação de senha e avisos de review. |
+| `BREVO_API_KEY` e `BREVO_SENDER_EMAIL` | Necessárias para novos cadastros, verificação de e-mail, recuperação de senha e avisos de review. |
 | `GEMINI_API_KEY` | Opcional. Use um projeto gratuito para habilitar triagem de texto e imagem. |
 
 Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Vercel.
@@ -42,7 +42,7 @@ Gere o `CRON_SECRET` com o comando abaixo e cadastre o resultado no painel da Ve
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-O build valida as variáveis obrigatórias da infraestrutura e seus formatos quando executado na Vercel. Configure o Resend antes de abrir o cadastro. Para enviar a qualquer endereço, verifique um domínio remetente no Resend.
+O build valida as variáveis obrigatórias da infraestrutura e seus formatos quando executado na Vercel. Configure a Brevo antes de abrir o cadastro. Para enviar a qualquer endereço com boa entrega, autentique um domínio remetente na Brevo.
 
 4. O botão **Deploy** da importação publica a branch selecionada conforme a configuração de produção do projeto. Para testar um preview antes de abrir o piloto, configure o projeto e use uma branch diferente da branch de produção ou a CLI, a partir da raiz do monorepo.
 
@@ -62,16 +62,16 @@ O SQLite continua disponível para desenvolvimento local quando `DATABASE_URL` e
 
 ## Ativar e validar os avisos por e-mail
 
-1. No Resend, abra **Domains → Add Domain**. Adicione um domínio que você controla, como `avisos.seudominio.com.br`. Copie os registros de envio exibidos para o painel DNS do domínio e aguarde o status **Verified**. [Domínios verificados](https://resend.com/docs/dashboard/domains/introduction)
-2. Abra **API Keys → Create API Key**, dê à chave o nome `ReviewLab` e escolha a permissão **Sending access**. Guarde a chave em `RESEND_API_KEY`. Em `RESEND_FROM_EMAIL`, informe um endereço do domínio verificado, como `reviewlab@avisos.seudominio.com.br`. [Chaves do Resend](https://resend.com/docs/dashboard/api-keys/introduction)
+1. Na Brevo, abra **Senders, Domains & Dedicated IPs → Domains** e adicione um domínio que você controla, como `avisos.seudominio.com.br`. Copie os registros DKIM, DMARC e de verificação para o painel DNS do domínio e aguarde a autenticação. Depois, em **Senders**, cadastre o endereço remetente desse domínio.
+2. Abra **SMTP & API → API Keys**, gere uma chave com o nome `ReviewLab` e guarde-a em `BREVO_API_KEY`. Em `BREVO_SENDER_EMAIL`, informe o remetente cadastrado, como `reviewlab@avisos.seudominio.com.br`. A API recusa remetentes que não estejam cadastrados. Se a conta restringir o uso da API por IP, libere o IP do servidor ou desative a restrição para a Vercel. [E-mail transacional da Brevo](https://developers.brevo.com/docs/send-a-transactional-email)
 3. Na Vercel, adicione as duas variáveis em **Settings → Environment Variables**, selecione **Preview** ou **Production** e publique um novo deploy com este código. O endereço HTTPS padrão da Vercel já serve para os links dos projetos. Se usar um endereço público diferente, configure `APP_ORIGIN` com a origem HTTPS. Fora da Vercel, configure também `APP_ORIGIN` com a URL pública HTTPS. No Docker, use o `.env` da raiz e recrie o serviço. Ao rodar o Next.js diretamente, use `apps/web/.env.local` e reinicie o servidor.
-4. Em uma conta de teste do ReviewLab, ative os avisos no perfil e selecione uma plataforma. Em outra conta, crie um projeto novo nessa plataforma e clique em **Publicar em Explorar**. Consulte **Avisos por e-mail** na página do projeto e confirme a entrega no painel **Emails** do Resend e na caixa de entrada.
+4. Em uma conta de teste do ReviewLab, ative os avisos no perfil e selecione uma plataforma. Em outra conta, crie um projeto novo nessa plataforma e clique em **Publicar em Explorar**. Consulte **Avisos por e-mail** na página do projeto e confirme a entrega em **Transactional → Logs** da Brevo e na caixa de entrada.
 
-Para testar sem domínio próprio, use `RESEND_FROM_EMAIL=onboarding@resend.dev` em um ambiente de teste. Use como destinatário do ReviewLab o mesmo endereço cadastrado na sua conta do Resend. Esse remetente permite enviar apenas para esse endereço. [Domínio de teste do Resend](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
+Para testar sem domínio próprio, cadastre em **Senders** um endereço seu e confirme o código recebido. Use esse endereço em `BREVO_SENDER_EMAIL` apenas em homologação: remetentes de provedores gratuitos, como Gmail, costumam cair no spam ou ser recusados por DMARC. O plano gratuito da Brevo tem limite diário de envios.
 
-Valide também o cadastro e a recuperação de senha com esse endereço. Uma conta existente pode solicitar um link em **Meu perfil**. Os links de cadastro e verificação expiram em 24 horas. O de recuperação de senha expira em 30 minutos e encerra as sessões anteriores após o uso. Mantenha o rastreamento de cliques desligado no domínio remetente usado para links de conta.
+Valide também o cadastro e a recuperação de senha com esse endereço. Uma conta existente pode solicitar um link em **Meu perfil**. Os links de cadastro e verificação expiram em 24 horas. O de recuperação de senha expira em 30 minutos e encerra as sessões anteriores após o uso. Desative o rastreamento de cliques dos e-mails transacionais na Brevo, para que os links de conta não passem por redirecionamento.
 
-Se aparecer **Nenhum testador inscrito**, confira o consentimento, a plataforma e se o destinatário é outra conta. Se o Resend recusar um envio, confira o status HTTP nos logs do servidor e o painel do provedor. A fila respeita `Retry-After` em respostas HTTP 429. Uma resposta sem confirmação fica registrada como incerta, pois o provedor pode ter recebido o pedido. A fila expira avisos pendentes após 48 horas.
+Se aparecer **Nenhum testador inscrito**, confira o consentimento, a plataforma e se o destinatário é outra conta. Se a Brevo recusar um envio, confira o status HTTP nos logs do servidor e os registros transacionais do provedor. A fila respeita `Retry-After` e `x-sib-ratelimit-reset` em respostas HTTP 429. Uma resposta sem confirmação fica registrada como incerta, pois o provedor pode ter recebido o pedido. A fila expira avisos pendentes após 48 horas.
 
 O cron `/api/jobs` recupera até 20 avisos por execução. A publicação, o catálogo e a consulta do projeto pelo dono também acionam lotes em segundo plano. Como o aviso é enfileirado no primeiro pedido de review, publique um projeto novo para testar depois de ativar a integração.
 

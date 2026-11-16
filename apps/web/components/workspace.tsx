@@ -2,14 +2,16 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, CircleAlert, FolderOpen, MessageSquare, Plus, Search, UserRound } from 'lucide-react';
 import { platformLabels, projectStatusLabels, type Platform, type Project, type ProjectDetail, type Session } from '@reviewlab/api/contracts';
 import { api, errorMessage, projectApi, projectPath } from '../lib/client';
+import { projectOwnerLabel } from '../lib/locale';
 import { Modal, ProjectForm, ReviewForm } from './forms';
 import { PlatformTags, ProjectCover, ProjectView, StatusTag } from './project-detail';
 import { Button, buttonVariants } from './ui/button';
-import { Input, NativeSelect } from './ui/input';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { WorkspaceShell } from './ui/workspace-shell';
 
 type Dialog = 'new' | 'edit' | 'review';
@@ -26,14 +28,15 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
   const [query, setQuery] = useState('');
   const [platform, setPlatform] = useState('');
   const [status, setStatus] = useState('');
-  const scope = projects.filter(project => mine ? project.owner_id === session.user?.id : project.requested_at);
+  const isOwnProject = (project: Project) => project.owner_id === session.user?.id;
+  const scope = projects.filter(project => isOwnProject(project) || (!mine && project.requested_at));
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
   const visible = scope.filter(project => (!platform || project.platforms.includes(platform as Platform)) && (!status || status === project.status)
     && (!normalized || [project.name, project.description, project.owner].some(value => value.toLocaleLowerCase('pt-BR').includes(normalized))));
   const count = (state: Project['status']) => scope.filter(project => project.status === state).length;
   const filtered = Boolean(normalized || platform || status);
   const stats = [
-    { label: mine ? 'Total' : 'Anunciados', value: scope.length },
+    { label: 'Total', value: scope.length },
     { label: 'Em review', value: count('review') },
     { label: 'Em desenvolvimento', value: count('dev') },
     { label: 'Em produção', value: count('prod') },
@@ -45,7 +48,7 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
         <h1 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{mine ? 'Meus projetos' : 'Explorar projetos'}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{mine
           ? 'Acompanhe as reviews e os retestes dos seus projetos.'
-          : 'Encontre projetos da comunidade para testar.'}</p>
+          : 'Encontre projetos da comunidade para testar. Seus rascunhos aparecem só para você.'}</p>
       </div>
       <Button onClick={onNew}><Plus size={17} aria-hidden />Novo projeto</Button>
     </header>
@@ -67,14 +70,20 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
             <span className="sr-only">Buscar projetos</span>
             <Input className="pl-9 md:w-48" type="search" placeholder="Buscar projetos" value={query} onChange={event => setQuery(event.target.value)} />
           </label>
-          <label className="min-w-0"><span className="sr-only">Plataforma</span><NativeSelect value={platform} onChange={event => setPlatform(event.target.value)}>
-            <option value="">Todas as plataformas</option>
-            {Object.entries(platformLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </NativeSelect></label>
-          <label className="min-w-0"><span className="sr-only">Status</span><NativeSelect value={status} onChange={event => setStatus(event.target.value)}>
-            <option value="">Todos os status</option>
-            {Object.entries(projectStatusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </NativeSelect></label>
+          <Select value={platform || 'all'} onValueChange={value => setPlatform(value === 'all' ? '' : value)}>
+            <SelectTrigger aria-label="Plataforma" className="md:w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as plataformas</SelectItem>
+              {Object.entries(platformLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={status || 'all'} onValueChange={value => setStatus(value === 'all' ? '' : value)}>
+            <SelectTrigger aria-label="Status" className="md:w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {Object.entries(projectStatusLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       {visible.length > 0 ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visible.map(project => <article className="group min-w-0 rounded-lg border border-border bg-card transition-colors hover:border-input" key={project.id}>
@@ -95,7 +104,7 @@ function Catalog({ projects, mine, session, onNew }: { projects: Project[]; mine
               </div>
             </div>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-1.5 wrap-anywhere"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted font-semibold text-foreground" aria-hidden>{project.owner.slice(0, 1).toUpperCase()}</span>{project.owner}</span>
+              <span className="flex min-w-0 items-center gap-1.5 wrap-anywhere"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted font-semibold text-foreground" aria-hidden>{project.owner.slice(0, 1).toUpperCase()}</span>{projectOwnerLabel(project.owner, isOwnProject(project))}</span>
               <span className="flex shrink-0 items-center gap-1.5"><MessageSquare size={14} aria-hidden />{project.review_count} {project.review_count === 1 ? 'review' : 'reviews'}</span>
             </div>
             {Boolean(project.pending_retests) && <p className="text-xs font-semibold text-primary">{project.pending_retests} {project.pending_retests === 1 ? 'reteste pendente' : 'retestes pendentes'}</p>}
@@ -127,25 +136,34 @@ export function Workspace({ mine = false, projectId }: { mine?: boolean; project
   const authQuery = next ? '?' + new URLSearchParams({ next }) : '';
   const signInHref = '/entrar' + authQuery;
 
+  const dataPath = projectId ? projectApi(projectId) : '/api/projects';
+  // Pedido antecipado dos dados, feito junto com a sessão para evitar uma ida e volta extra ao servidor.
+  const prefetch = useRef<{ path: string; result: Promise<unknown> } | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
+    prefetch.current = { path: dataPath, result: api<unknown>(dataPath, undefined, controller.signal).catch(() => null) };
     api<Session>('/api/session', undefined, controller.signal).then(setSession).catch(error => {
       if (!controller.signal.aborted) setError(errorMessage(error));
     });
     return () => controller.abort();
+    // O pedido antecipado vale só para a primeira carga; as atualizações usam o efeito abaixo.
   }, []);
 
   useEffect(() => {
     if (!userId) return;
     const controller = new AbortController();
     const signal = controller.signal;
+    const early = prefetch.current?.path === dataPath ? prefetch.current.result : null;
+    prefetch.current = null;
+    const fetchData = async <T,>() => ((early && await early) ?? await api<T>(dataPath, undefined, signal)) as T;
     const load = async () => {
       try {
         if (projectId) {
-          const result = await api<ProjectDetail>(projectApi(projectId), undefined, signal);
+          const result = await fetchData<ProjectDetail>();
           if (!signal.aborted) setDetail(result);
         } else {
-          const result = await api<{ projects: Project[] }>('/api/projects', undefined, signal);
+          const result = await fetchData<{ projects: Project[] }>();
           if (!signal.aborted) setProjects(result.projects);
         }
         if (!signal.aborted) setError('');
@@ -157,7 +175,7 @@ export function Workspace({ mine = false, projectId }: { mine?: boolean; project
     };
     void load();
     return () => controller.abort();
-  }, [projectId, userId, version]);
+  }, [dataPath, projectId, userId, version]);
 
   useEffect(() => {
     if (!notice) return;

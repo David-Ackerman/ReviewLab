@@ -92,32 +92,28 @@ export async function createAnnouncements(db: Database, mailer: Mailer) {
       let messageId: string | null = null;
       let retryAfter: number | null = null;
       try {
-        const response = await mailer.send(item.email, 'ReviewLab · Novo projeto para review: ' + title,
+        const result = await mailer.send(item.email, 'ReviewLab · Novo projeto para review: ' + title,
           `O projeto ${title} (${targets}) está aberto para review.\n\n${url}\n\nPara deixar de receber avisos, entre no ReviewLab e desmarque a opção no seu perfil.`,
           'review-request', `review-request/${item.project_id}/${item.user_id}`);
-        if (response.ok) {
-          const result = await response.json();
-          if (typeof result?.id === 'string' && result.id) {
+        if (result.ok) {
+          if (result.messageId) {
             state = 'accepted';
-            messageId = result.id;
+            messageId = result.messageId;
           }
         } else {
-          await response.body?.cancel().catch(() => {});
-          if (response.status === 429) {
-            const header = response.headers.get('retry-after') ?? '';
-            const time = Date.now();
-            const delay = /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - time;
+          if (result.status === 429) {
+            const delay = result.retryAfter;
             state = 'queued';
-            retryAfter = time + (Number.isSafeInteger(delay) && delay > 60_000 ? delay : 60_000);
-          } else if (response.status >= 400 && response.status < 500 && response.status !== 408) {
+            retryAfter = Date.now() + (delay !== null && Number.isSafeInteger(delay) && delay > 60_000 ? delay : 60_000);
+          } else if (result.status >= 400 && result.status < 500 && result.status !== 408) {
             state = 'failed';
           }
-          console.warn('Resend recusou ou não confirmou um anúncio HTTP', response.status);
+          console.warn('Brevo recusou ou não confirmou um anúncio HTTP', result.status);
         }
       } catch {
-        console.warn('Resend não confirmou o envio de um anúncio.');
+        console.warn('Brevo não confirmou o envio de um anúncio.');
       }
-      // A chave do Resend expira em 24 horas. Envios incertos exigem verificação no provedor.
+      // A Brevo não deduplica pedidos repetidos. Envios incertos exigem verificação no provedor e não são reenviados.
       await run(`UPDATE announcement_emails SET state = ?, message_id = ?, retry_after = ?
         WHERE project_id = ? AND user_id = ? AND state = 'sending'`, state, messageId, retryAfter, item.project_id, item.user_id);
       if (!retryAfter) return true;

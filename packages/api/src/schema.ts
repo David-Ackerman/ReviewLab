@@ -75,6 +75,8 @@ export async function migrate(db: Database) {
     await db.addColumn('projects', 'cover_path', 'TEXT');
     await db.addColumn('ticket_attachments', 'storage_path', 'TEXT');
     await db.run('CREATE INDEX IF NOT EXISTS projects_explore ON projects(requested_at DESC, id DESC) WHERE requested_at IS NOT NULL');
+    // Catálogo e "Meus projetos" filtram por dono; sem o índice, cada carga varre a tabela inteira.
+    await db.run('CREATE INDEX IF NOT EXISTS projects_owner ON projects(owner_id)');
     await db.protectTables('users', 'sessions', 'account_tokens', 'mcp_tokens', 'projects', 'android_test_shares', 'notifications', 'reviews', 'tickets', 'ticket_events', 'ticket_attachments');
   });
 }

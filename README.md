@@ -60,7 +60,7 @@ O guia cobre o deploy na Vercel com Supabase e a execução com Docker e SQLite 
 
 O primeiro pedido de review entra na fila para os testadores com e-mail verificado que ativaram os avisos e marcaram ao menos uma plataforma do projeto. Cada testador elegível recebe um e-mail por projeto, mesmo quando testa várias das plataformas selecionadas. Os membros podem desativar futuros avisos no perfil.
 
-O dono acompanha na página do projeto os avisos na fila, aceitos, recusados, cancelados ou sem confirmação. A entrega pode ser conferida no painel de e-mails do Resend. [Configuração e teste do Resend](DEPLOY.md#ativar-e-validar-os-avisos-por-e-mail)
+O dono acompanha na página do projeto os avisos na fila, aceitos, recusados, cancelados ou sem confirmação. A entrega pode ser conferida nos registros transacionais da Brevo. [Configuração e teste da Brevo](DEPLOY.md#ativar-e-validar-os-avisos-por-e-mail)
 
 ## Integração MCP
 

@@ -7,6 +7,7 @@ import { api, errorMessage, formatDate } from '../lib/client';
 import { CheckField, SubmitForm } from './forms';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 export function McpSettings() {
   const [tokens, setTokens] = useState<McpToken[]>([]);
@@ -101,11 +102,13 @@ export function McpSettings() {
     {endpoint && <details className="mt-4">
       <summary className="text-sm font-medium">Configurar cliente MCP</summary>
       <p className="mt-2 text-sm wrap-anywhere text-muted-foreground"><strong>Endpoint</strong> <code>{endpoint}</code></p>
-      <label className="mt-3 grid max-w-xs gap-1.5 text-sm font-medium">Cliente
-        <select className="min-h-10 rounded-md border border-input bg-card px-3" value={client} onChange={event => setClient(event.target.value === 'vscode' ? 'vscode' : 'codex')}>
-          <option value="codex">Codex</option><option value="vscode">VS Code</option>
-        </select>
-      </label>
+      <div className="mt-3 grid max-w-xs gap-1.5 text-sm font-medium">
+        <label htmlFor="mcp-client">Cliente</label>
+        <Select value={client} onValueChange={value => setClient(value === 'vscode' ? 'vscode' : 'codex')}>
+          <SelectTrigger id="mcp-client"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="codex">Codex</SelectItem><SelectItem value="vscode">VS Code</SelectItem></SelectContent>
+        </Select>
+      </div>
       <p className="mt-2 text-sm text-muted-foreground">{client === 'codex'
         ? 'Defina REVIEWLAB_MCP_TOKEN no ambiente que inicia o Codex e adicione esta configuração a ~/.codex/config.toml.'
         : 'Salve em .vscode/mcp.json. Ao iniciar o servidor no VS Code, cole a chave quando solicitado.'}</p>

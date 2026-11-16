@@ -158,9 +158,20 @@ export async function createApi() {
   }
   app.use('*', async (c, next) => {
     c.header('X-Content-Type-Options', 'nosniff');
-    c.header('Cache-Control', 'private, no-store');
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     await next();
+    // Sem cache por padrão. Uma rota pode liberar cache privado definindo o próprio cabeçalho.
+    if (!c.res.headers.has('Cache-Control')) {
+      try {
+        c.res.headers.set('Cache-Control', 'private, no-store');
+      } catch {
+        // Respostas com cabeçalhos imutáveis são copiadas antes da alteração.
+        const copy = new Response(c.res.body, c.res);
+        copy.headers.set('Cache-Control', 'private, no-store');
+        c.res = undefined;
+        c.res = copy;
+      }
+    }
   });
   app.use('/api/*', async (c, next) => {
     if (c.req.method === 'POST') {
@@ -336,9 +347,9 @@ export async function createApi() {
     return ticket;
   }
 
-  function sendImage(record: Media | undefined) {
+  function sendImage(record: Media | undefined, cache = 'private, no-store') {
     if (!record?.bytes || !record.type) fail(404, 'Imagem não encontrada.');
-    return new Response(new Uint8Array(record.bytes), { headers: { 'Content-Type': record.type, 'Cache-Control': 'private, no-store' } });
+    return new Response(new Uint8Array(record.bytes), { headers: { 'Content-Type': record.type, 'Cache-Control': cache } });
   }
 
   async function redirectMedia(c: AppContext, path: string) {
@@ -822,7 +833,8 @@ export async function createApi() {
     const id = c.req.param('id');
     const project = await projectFor(id, user);
     const cover = await get<Media & { cover_path: string | null }>('SELECT cover AS bytes, cover_type AS type, cover_path FROM projects WHERE id = ?', id);
-    return cover?.cover_path ? redirectMedia(c, cover.cover_path) : sendImage(cover);
+    // Capas raramente mudam e a página do projeto usa ?v= após uma edição. O cache privado evita baixar todas a cada visita ao catálogo.
+    return cover?.cover_path ? redirectMedia(c, cover.cover_path) : sendImage(cover, 'private, max-age=300');
   });
 
   app.post('/api/projects/:id/edit', async c => {
