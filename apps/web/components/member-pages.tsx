@@ -48,7 +48,7 @@ function ProfileSettings({ session, onUpdate }: { session: SignedIn; onUpdate: (
   const { user } = session;
   const [saved, setSaved] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
-  return <div className="grid max-w-2xl gap-5">
+  return <div className="grid gap-5">
     <div>
       <h1 className="text-3xl font-semibold tracking-tight">Meu perfil</h1>
       <p className="mt-2 text-sm text-muted-foreground">Gerencie sua conta, plataformas de teste e preferências.</p>

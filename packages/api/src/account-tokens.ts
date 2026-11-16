@@ -36,11 +36,10 @@ export function createAccountTokens(db: Database, mailer: Mailer) {
     if (next) url.searchParams.set('next', next);
     url.hash = 'token=' + token;
     const expiry = purpose === 'reset' ? '30 minutos' : '24 horas';
-    const response = await mailer.send(email, action.subject,
+    const result = await mailer.send(email, action.subject,
       `${action.subject} usando este link:\n\n${url.href}\n\nO link expira em ${expiry}. Se você não fez este pedido, ignore a mensagem.`,
       purpose, `account-${purpose}/${hash}`);
-    await response.body?.cancel().catch(() => {});
-    if (!response.ok) console.warn('Resend recusou e-mail de conta', purpose, response.status);
+    if (!result.ok) console.warn('Brevo recusou e-mail de conta', purpose, result.status);
   }
 
   async function find(purpose: Purpose, token: unknown) {

@@ -1,13 +1,21 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
+import { setNonce } from 'get-nonce';
 import { ThemeProvider, useTheme } from 'next-themes';
-import type { ReactNode } from 'react';
+import { createContext, useLayoutEffect, type ReactNode } from 'react';
 import { Button } from './ui/button';
 
+export const StyleNonceContext = createContext<string | undefined>(undefined);
+
 export function Theme({ nonce, children }: { nonce?: string; children: ReactNode }) {
+  useLayoutEffect(() => {
+    // Radix usa este nonce ao injetar o CSS de bloqueio de rolagem.
+    if (nonce) setNonce(nonce);
+  }, [nonce]);
+
   return <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme={false} nonce={nonce}>
-    {children}
+    <StyleNonceContext.Provider value={nonce}>{children}</StyleNonceContext.Provider>
   </ThemeProvider>;
 }
 

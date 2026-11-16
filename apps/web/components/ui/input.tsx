@@ -10,7 +10,3 @@ export function Input({ className, ...props }: ComponentProps<'input'>) {
 export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
   return <textarea data-slot="textarea" className={cn(fieldStyles, 'min-h-20 resize-y', className)} {...props} />;
 }
-
-export function NativeSelect({ className, ...props }: ComponentProps<'select'>) {
-  return <select data-slot="native-select" className={cn(fieldStyles, 'min-h-10', className)} {...props} />;
-}
