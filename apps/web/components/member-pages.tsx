@@ -13,8 +13,8 @@ import { Input } from './ui/input';
 import { WorkspaceShell } from './ui/workspace-shell';
 
 type SignedIn = Session & { user: User };
-const panel = 'min-w-0 rounded-lg border border-border bg-card p-4 sm:p-6';
-const field = 'grid gap-1.5 text-sm font-medium';
+const panel = 'min-w-0 surface p-5 sm:p-6';
+const field = 'grid gap-1.5 text-[13px] font-semibold';
 
 function MemberPage({ active, children }: {
   active: 'profile' | 'notifications'; children: (session: SignedIn, setSession: (session: Session) => void) => ReactNode;
@@ -50,11 +50,11 @@ function ProfileSettings({ session, onUpdate }: { session: SignedIn; onUpdate: (
   const [verificationSent, setVerificationSent] = useState(false);
   return <div className="grid gap-5">
     <div>
-      <h1 className="text-3xl font-semibold tracking-tight">Meu perfil</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Gerencie sua conta, plataformas de teste e preferências.</p>
+      <h1 className="text-[30px] leading-tight font-bold tracking-[-0.025em]">Meu perfil</h1>
+      <p className="mt-1.5 text-[15px] text-muted-foreground">Gerencie sua conta, plataformas de teste e preferências.</p>
     </div>
     <section className={panel} aria-labelledby="account-email">
-      <h2 id="account-email" className="flex items-center gap-2 font-semibold"><MailCheck className="text-primary" size={18} aria-hidden /> E-mail da conta</h2>
+      <h2 id="account-email" className="flex items-center gap-2 font-semibold"><MailCheck className="text-muted-foreground" size={17} aria-hidden /> E-mail da conta</h2>
       <p className="mt-2 text-sm wrap-anywhere">{user.email}</p>
       <p className="mt-1 text-sm text-muted-foreground">{user.email_verified ? 'Endereço verificado' : 'Verificação pendente'}</p>
       {!user.email_verified && <div className="mt-4">
@@ -67,7 +67,7 @@ function ProfileSettings({ session, onUpdate }: { session: SignedIn; onUpdate: (
             setVerificationSent(true);
           }}><Button variant="outline">Enviar link de verificação</Button></SubmitForm>}
       </div>}
-      <Link className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" href="/recuperar-senha">Redefinir senha</Link>
+      <Link className="mt-4 inline-block text-sm font-semibold" href="/recuperar-senha">Redefinir senha</Link>
     </section>
     <section className={panel} aria-labelledby="tester-settings">
       <h2 id="tester-settings" className="mb-4 font-semibold">Preferências de teste</h2>
@@ -161,17 +161,17 @@ function NotificationList({ session, onUpdate }: { session: SignedIn; onUpdate: 
   return <div className="grid max-w-3xl gap-5">
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Notificações</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Veja quem compartilhou e-mail de teste com seus projetos Android.</p>
+        <h1 className="text-[30px] leading-tight font-bold tracking-[-0.025em]">Notificações</h1>
+        <p className="mt-1.5 text-[15px] text-muted-foreground">Veja quem compartilhou e-mail de teste com seus projetos Android.</p>
       </div>
       {notifications?.some(item => !item.read) && <Button variant="outline" disabled={busy} onClick={() => void markRead()}>Marcar todas como lidas</Button>}
     </header>
     {error && <p className={panel + ' text-sm text-destructive'} role="alert">{error}</p>}
     {!notifications ? !error && <p className="text-sm text-muted-foreground" role="status">Carregando notificações…</p>
-      : notifications.length ? <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+      : notifications.length ? <ul className="divide-y divide-border overflow-hidden surface">
         {notifications.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
           <div className="min-w-0">
-            {!item.read && <p className="mb-1 text-xs font-semibold text-primary">Não lida</p>}
+            {!item.read && <p className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary-strong"><span className="size-1.5 rounded-full bg-primary" aria-hidden />Não lida</p>}
             <p className="text-sm wrap-anywhere"><strong>{item.actorName}</strong> compartilhou o e-mail de teste com <strong>{item.projectName}</strong>.</p>
             <time className="mt-1 block text-xs text-muted-foreground" dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
           </div>
