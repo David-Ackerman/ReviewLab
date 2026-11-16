@@ -56,9 +56,9 @@ export function AndroidTesters({ project, session }: { project: Project; session
     }
   }
 
-  return <section className="min-w-0 rounded-lg border border-border bg-card p-4 sm:p-5">
+  return <section className="min-w-0 surface p-5 sm:p-[22px]">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight"><Smartphone size={18} className="text-primary" aria-hidden /> Testadores Android</h2>
+      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight"><Smartphone size={17} className="text-muted-foreground" aria-hidden /> Testadores Android</h2>
       {owner && <Button variant="ghost" type="button" onClick={() => { setError(''); setResult(null); setRevision(value => value + 1); }}>Atualizar lista</Button>}
     </div>
     {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
@@ -73,7 +73,7 @@ export function AndroidTesters({ project, session }: { project: Project; session
                 <p className="font-medium wrap-anywhere">{tester.name}</p>
                 <p className="wrap-anywhere text-muted-foreground">{tester.email}</p>
               </div>
-              {tester.shared && <span className="rounded-md bg-primary-muted px-2 py-0.5 text-xs font-medium text-primary">Só para este projeto</span>}
+              {tester.shared && <span className="rounded-md bg-primary-muted px-2 py-0.5 text-xs font-semibold text-primary-strong">Só para este projeto</span>}
             </li>)}
           </ul>
           <Button variant="outline" type="button" className="mt-3" onClick={copy}><Clipboard size={15} aria-hidden /> Copiar e-mails</Button>
@@ -87,7 +87,7 @@ export function AndroidTesters({ project, session }: { project: Project; session
       {!result && error && <Button type="button" variant="ghost" className="mt-3" onClick={() => { setError(''); setRevision(value => value + 1); }}>Tentar novamente</Button>}
     </> : <p className="mt-2 text-sm text-muted-foreground">
       {user?.android_test_email ? 'Seu e-mail de teste está disponível aos donos de projetos Android.' : 'Adicione um e-mail de teste para receber convites do Google Play.'}{' '}
-      <Link href="/perfil" className="font-semibold text-primary hover:underline">Configurar no perfil</Link>
+      <Link href="/perfil" className="font-semibold">Configurar no perfil</Link>
     </p>}
   </section>;
 }

@@ -1,50 +1,46 @@
+'use client';
+
 import Link from 'next/link';
-import { useId } from 'react';
-import { ArrowDownToLine, ArrowLeft, ArrowUpRight, ClipboardList, FolderOpen, Mail, MessageSquare, Monitor, Pencil, Smartphone, Users } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  ArrowDownToLine, ArrowUpRight, Bot, CircleCheck, FolderOpen, Globe, Mail, MessageSquare, Pencil, Rocket, Share2, Sparkles, Ticket as TicketIcon,
+} from 'lucide-react';
 import {
   platformLabels, projectStatusLabels, reportLabels, reviewsRemaining, ticketStatusLabels,
-  type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket,
+  type AnnouncementSummary, type Platform, type Project, type ProjectDetail, type ProjectStatus, type Session, type Ticket, type TicketStatus,
 } from '@reviewlab/api/contracts';
-import { api, formatDate, projectApi } from '../lib/client';
+import { api, errorMessage, formatDate, formatDateTime, projectApi, shortId, timeAgo } from '../lib/client';
 import { projectOwnerLabel } from '../lib/locale';
-import { SubmitForm } from './forms';
 import { cn } from '../lib/utils';
-import { Button, buttonVariants } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { AndroidTesters } from './android-testers';
+import { Button, Initials, buttonVariants } from './ui/button';
 
-const panel = 'min-w-0 rounded-lg border border-border bg-card p-4 sm:p-5';
-const panelTitle = 'flex items-center gap-2 text-lg font-semibold tracking-tight [&>svg]:shrink-0 [&>svg]:text-muted-foreground';
-const emptyPanel = 'mt-4 flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground [&>svg]:shrink-0';
-const entry = 'mt-4 grid scroll-mt-4 gap-2 border-t border-border pt-4';
-const textLink = 'inline-flex items-center gap-1 wrap-anywhere text-primary underline underline-offset-2 [&>svg]:shrink-0';
-const prose = 'text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap';
+const panel = 'min-w-0 surface p-5 sm:p-[22px]';
+const asidePanel = 'flex min-w-0 flex-col gap-3 surface p-[18px]';
+const asideTitle = 'text-[13px] font-semibold text-muted-foreground';
+const prose = 'text-[15px] leading-relaxed wrap-anywhere whitespace-pre-wrap text-soft';
 
 export function PlatformTags({ platforms }: { platforms: Platform[] }) {
   return <ul className="flex flex-wrap gap-1.5" aria-label="Plataformas">
-    {platforms.map(platform => {
-      const Icon = platform === 'web' ? Monitor : Smartphone;
-      return <li key={platform} className="inline-flex items-center gap-1 rounded-[5px] border border-border px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
-        <Icon size={12} aria-hidden />{platformLabels[platform]}
-      </li>;
-    })}
+    {platforms.map(platform => <li key={platform} className="rounded-[5px] border border-border px-1.5 py-0.5 font-mono text-[11px] text-soft">{platformLabels[platform].toLowerCase()}</li>)}
   </ul>;
 }
 
 type StatusShape = 'open' | 'progress' | 'done' | 'dashed';
-const statusTones: Record<string, { shape: StatusShape; className: string }> = {
-  open: { shape: 'open', className: 'bg-status-open-muted text-status-open' },
-  working: { shape: 'progress', className: 'bg-status-working-muted text-status-working' },
-  fixed: { shape: 'done', className: 'bg-status-done-muted text-status-done' },
-  unreproduced: { shape: 'dashed', className: 'bg-muted text-muted-foreground' },
-  dev: { shape: 'open', className: 'bg-muted text-muted-foreground' },
-  review: { shape: 'progress', className: 'bg-primary-muted text-primary-strong' },
-  prod: { shape: 'done', className: 'bg-status-done-muted text-status-done' },
+const statusTones: Record<string, { shape: StatusShape; text: string; bg: string }> = {
+  open: { shape: 'open', text: 'text-status-open', bg: 'bg-status-open-muted' },
+  working: { shape: 'progress', text: 'text-status-working', bg: 'bg-status-working-muted' },
+  fixed: { shape: 'done', text: 'text-status-done', bg: 'bg-status-done-muted' },
+  unreproduced: { shape: 'dashed', text: 'text-soft', bg: 'bg-muted' },
+  dev: { shape: 'open', text: 'text-soft', bg: 'bg-muted' },
+  review: { shape: 'progress', text: 'text-primary-strong', bg: 'bg-primary-muted' },
+  prod: { shape: 'done', text: 'text-status-done', bg: 'bg-status-done-muted' },
 };
 
 // A forma do ícone repete a informação da cor para quem não distingue os tons.
-function StatusIcon({ shape }: { shape: StatusShape }) {
-  return <svg width="12" height="12" viewBox="0 0 12 12" className="shrink-0" aria-hidden>
+export function StatusIcon({ state, className }: { state: string; className?: string }) {
+  const { shape } = statusTones[state] ?? statusTones.unreproduced;
+  return <svg width="12" height="12" viewBox="0 0 12 12" className={cn('shrink-0', className)} aria-hidden>
     {shape === 'done' ? <>
       <circle cx="6" cy="6" r="5" fill="currentColor" />
       <path d="M3.6 6.1l1.6 1.6 3.2-3.3" fill="none" stroke="var(--card)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -55,23 +51,30 @@ function StatusIcon({ shape }: { shape: StatusShape }) {
   </svg>;
 }
 
-export function StatusTag({ state, label }: { state: string; label: string }) {
+/** Tickets usam pílula com ícone; status de projeto usa etiqueta retangular, como no design. */
+export function StatusTag({ state, label, compact = false }: { state: string; label: string; compact?: boolean }) {
   const tone = statusTones[state] ?? statusTones.unreproduced;
-  return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs leading-none font-semibold', tone.className)}>
-    <StatusIcon shape={tone.shape} />{label}
+  const project = state in projectStatusLabels;
+  return <span className={cn('inline-flex shrink-0 items-center gap-1.5 font-semibold whitespace-nowrap', tone.text, tone.bg,
+    project ? 'rounded-md' : 'rounded-full', compact ? 'px-1.5 py-px text-[11px]' : 'px-2 py-[3px] text-xs')}>
+    {!project && <StatusIcon state={state} />}{label}
   </span>;
 }
 
-export function ProjectCover({ project, version, className }: { project: Project; version?: number; className?: string }) {
-  const suffix = version ? '?v=' + version : '';
-  return <div className={cn('relative grid aspect-[2/1] shrink-0 place-items-center overflow-hidden border-b border-border bg-muted', className)}>
-    {project.has_cover ? <img className="absolute inset-0 size-full object-cover" src={projectApi(project.id) + '/cover' + suffix} alt="" loading={version === undefined ? 'lazy' : undefined} />
-      : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--input)_65%,transparent)_0.7px,transparent_0.7px)] bg-size-[14px_14px]" aria-hidden>
-        <span className="grid size-11 place-items-center rounded-md border border-border bg-card text-base font-semibold tracking-tight text-foreground">
-          {project.name.trim().slice(0, 2).toLocaleUpperCase('pt-BR')}
-        </span>
-      </div>}
-  </div>;
+export function ProgressBar({ value, max, className }: { value: number; max: number; className?: string }) {
+  const percent = Math.min(100, Math.round(value / Math.max(1, max) * 100));
+  return <span className={cn('block h-1 overflow-hidden rounded-full bg-muted', className)} role="progressbar" aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} aria-label="Progresso de reviews">
+    <span className="block h-full rounded-full bg-primary" style={{ width: percent + '%' }} />
+  </span>;
+}
+
+/** Miniatura do projeto: a imagem enviada pelo dono ou as iniciais do nome. */
+export function ProjectTile({ project, version, className }: { project: Project; version?: number; className?: string }) {
+  if (project.has_cover) {
+    return <img src={projectApi(project.id) + '/cover' + (version ? '?v=' + version : '')} alt="" loading="lazy"
+      className={cn('shrink-0 border border-border bg-muted object-cover', className)} />;
+  }
+  return <Initials name={project.name} className={cn('border border-border', className)} />;
 }
 
 const eventLabels = {
@@ -81,76 +84,214 @@ const eventLabels = {
   retest_reopened: 'Ticket reaberto',
 };
 
-function StatusForm({ path, status, labels, label, onChange }: {
-  path: string; status: string; labels: Record<string, string>; label: string; onChange: (message: string) => void;
-}) {
-  const id = useId();
-  return <SubmitForm inline onSubmit={async data => {
-    await api(path + '/status', { status: data.get('status') });
-    onChange('Status atualizado.');
-  }}>
-    <div className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">
-      <label htmlFor={id}>{label}</label>
-      <Select name="status" defaultValue={status} key={status}>
-        <SelectTrigger id={id}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {Object.entries(labels).map(([value, text]) => <SelectItem key={value} value={value}>{text}</SelectItem>)}
-        </SelectContent>
-      </Select>
-    </div>
-    <Button variant="outline">Atualizar</Button>
-  </SubmitForm>;
+/** Executa uma ação da API com estado de envio e erro, sem precisar de um formulário. */
+function useAction(onChange: (message: string) => void) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function run(action: () => Promise<unknown>, message: string) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+      onChange(message);
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, run };
 }
 
-function TicketCard({ ticket, owner, onChange }: { ticket: Ticket; owner: boolean; onChange: (message: string) => void }) {
+function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return <Button type="button" variant="outline" size="sm" className={className} onClick={async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch { /* A área de transferência pode estar bloqueada; o texto continua selecionável. */ }
+  }}>{copied ? 'Copiado' : label}</Button>;
+}
+
+function isTyping() {
+  const element = document.activeElement;
+  return element instanceof HTMLElement && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
+    || Boolean(document.querySelector('[role="dialog"]'));
+}
+
+type Filter = 'action' | 'retest' | 'all';
+const needsAction = (ticket: Ticket) => ticket.status === 'open' || ticket.status === 'working';
+
+function TicketDetail({ ticket, owner, tickets, onChange, onShowReview }: {
+  ticket: Ticket; owner: boolean; tickets: Ticket[]; onChange: (message: string) => void; onShowReview: (id: string) => void;
+}) {
   const path = '/api/tickets/' + ticket.id;
+  const { busy, error, run } = useAction(onChange);
   const files = ticket.attachments.map(file => ({ ...file, url: path + '/attachments/' + file.id }));
   if (ticket.has_evidence) files.unshift({ id: 'legacy', name: 'Captura de tela', type: 'image/', url: path + '/evidence' });
   const pending = ticket.retest_request_id;
-  const incomplete = ticket.missing.length > 0 || ticket.suggestion?.confidence === 'baixa';
-  const canRetest = ticket.status === 'fixed' && (owner ? !pending : Boolean(pending));
+  const triaging = ['queued', 'running'].includes(ticket.triage_state ?? '');
+  const duplicate = ticket.duplicate_id ? tickets.find(item => item.id === ticket.duplicate_id) : undefined;
+  const fields = (Object.keys(reportLabels) as Array<keyof typeof reportLabels>).filter(key => key !== 'title');
+  const mono = (key: string) => key === 'steps' || key === 'environment';
+  const setStatus = (status: TicketStatus) => run(() => api(path + '/status', { status }), 'Status atualizado.');
+  const retest = (outcome: string) => run(() => api(path + '/retest', { outcome, requestId: pending }),
+    outcome === 'request' ? 'Reteste solicitado.' : outcome === 'confirmed' ? 'Correção confirmada.' : 'Ticket reaberto.');
 
-  return <article id={'ticket-' + ticket.id} className={entry}>
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="font-mono text-xs text-muted-foreground">#{ticket.id.slice(0, 8).toUpperCase()}</span>
-      <StatusTag state={ticket.status} label={ticketStatusLabels[ticket.status]} />
-    </div>
-    <h3 className="font-semibold wrap-anywhere">{ticket.title || 'Bug sem título'}</h3>
-    <p className="text-sm wrap-anywhere text-muted-foreground">{ticket.reporter} · {formatDate(ticket.created_at)} · <a className={textLink} href={'#review-' + ticket.review_id}>Ver review</a></p>
-    <dl className="grid gap-2">
-      {(Object.keys(reportLabels) as Array<keyof typeof reportLabels>).filter(key => key !== 'title' && ticket[key]).map(key =>
-        <div key={key}><dt className="text-xs font-semibold text-muted-foreground">{reportLabels[key]}</dt><dd className={prose}>{ticket[key]}</dd></div>)}
+  return <article className="flex min-w-0 flex-col gap-5 px-1 py-6 sm:px-9 sm:pt-7 sm:pb-8" aria-labelledby={'ticket-title-' + ticket.id}>
+    <header className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="font-mono text-xs text-muted-foreground">{shortId(ticket.id)}</span>
+        <StatusTag state={ticket.status} label={ticketStatusLabels[ticket.status]} />
+        <CopyButton value={window.location.origin + window.location.pathname + '#ticket-' + ticket.id} label="Copiar link" className="h-7 px-2 text-[11px]" />
+      </div>
+      <h2 id={'ticket-title-' + ticket.id} className="text-2xl leading-tight font-bold tracking-[-0.02em] wrap-anywhere">{ticket.title || 'Bug sem título'}</h2>
+      <p className="text-[13px] text-muted-foreground">Relatado por <strong className="font-semibold text-foreground">{ticket.reporter}</strong> · {formatDateTime(ticket.created_at)} ·{' '}
+        <button type="button" className="font-medium text-primary hover:text-primary-strong hover:underline" onClick={() => onShowReview(ticket.review_id)}>ver review de origem</button></p>
+    </header>
+
+    {(triaging || ticket.suggestion || ticket.duplicate_id || ticket.missing.length > 0) && <section aria-label="Triagem" className="flex flex-col gap-2.5 rounded-[10px] border border-input bg-card px-4 py-3.5">
+      <p className="flex flex-wrap items-center gap-2 text-[13px] font-semibold"><Sparkles size={15} className="text-primary" aria-hidden />Triagem automática
+        {ticket.suggestion && <span className="font-mono text-[11px] font-medium text-muted-foreground">confiança {ticket.suggestion.confidence}</span>}
+        {triaging && <span className="font-mono text-[11px] font-medium text-muted-foreground">em andamento…</span>}
+      </p>
+      <div className="flex flex-wrap gap-2 text-xs">
+        {ticket.suggestion && <span className="rounded-md bg-muted px-2 py-1 text-soft">Categoria: {ticket.suggestion.category}</span>}
+        {ticket.duplicate_id && <a className="rounded-md bg-muted px-2 py-1 no-underline" href={'#ticket-' + ticket.duplicate_id}>Possível duplicata de {shortId(duplicate?.id ?? ticket.duplicate_id)}</a>}
+        <span className={cn('rounded-md px-2 py-1', ticket.missing.length ? 'bg-status-open-muted text-status-open' : 'bg-status-done-muted text-status-done')}>
+          {ticket.missing.length ? 'Faltam: ' + ticket.missing.map(field => reportLabels[field].toLowerCase()).join(', ') : 'Campos completos'}
+        </span>
+      </div>
+      {ticket.suggestion && <p className="text-[13px] leading-relaxed text-soft"><strong className="font-semibold text-foreground">{ticket.suggestion.title}.</strong> {ticket.suggestion.summary}</p>}
+    </section>}
+
+    <dl className="grid gap-x-7 gap-y-[18px] sm:grid-cols-2">
+      {fields.map(key => <div key={key} className="flex min-w-0 flex-col gap-1.5">
+        <dt className="text-xs font-semibold text-muted-foreground">{reportLabels[key]}</dt>
+        <dd className={cn('wrap-anywhere whitespace-pre-line', ticket[key] ? 'text-foreground/90' : 'text-muted-foreground italic',
+          mono(key) ? 'font-mono text-[13px] leading-[1.8]' : 'text-sm leading-relaxed')}>{ticket[key] || 'Não informado'}</dd>
+      </div>)}
     </dl>
-    {files.length > 0 && <div className="grid grid-cols-2 gap-3">{files.map(file => <figure className="min-w-0" key={file.id}>
-      {file.type.startsWith('video/')
-        ? <video className="max-h-56 w-full rounded-lg bg-muted" controls preload="metadata" src={file.url} aria-label={file.name} />
-        : <img className="max-h-56 w-full rounded-lg bg-muted object-contain" src={file.url} alt={file.name} loading="lazy" />}
-      <figcaption className="mt-1 text-xs"><a className={textLink} href={file.url} target="_blank" rel="noreferrer"><ArrowDownToLine size={14} aria-hidden />{file.name}</a></figcaption>
-    </figure>)}</div>}
-    {(incomplete || ticket.suggestion || ticket.duplicate_id || ['queued', 'running'].includes(ticket.triage_state ?? '')) && <div className="grid gap-1 rounded-lg bg-muted p-3 text-xs wrap-anywhere">
-      {incomplete && <p><strong>Precisa de detalhes.</strong> {ticket.missing.map(field => reportLabels[field]).join(', ')}</p>}
-      {['queued', 'running'].includes(ticket.triage_state ?? '') && <p>Triagem do relato em andamento.</p>}
-      {ticket.suggestion && <><p><strong>Sugestão da triagem</strong> · {ticket.suggestion.category} · confiança {ticket.suggestion.confidence}</p>
-        <p>{ticket.suggestion.title}</p><p>{ticket.suggestion.summary}</p></>}
-      {ticket.duplicate_id && <a className={textLink} href={'#ticket-' + ticket.duplicate_id}>Ver possível duplicata</a>}
-    </div>}
-    {ticket.events.length > 0 && <details className="text-xs wrap-anywhere"><summary>Histórico do ticket</summary>
-      <ol className="mt-2 list-inside list-disc text-muted-foreground">{ticket.events.map((event, index) => <li key={index}>{eventLabels[event.status]} · {event.actor} · {formatDate(event.created_at)}</li>)}</ol>
+
+    {files.length > 0 && <section aria-label="Evidências" className="grid grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))] gap-3">
+      {files.map(file => <figure className="flex min-w-0 flex-col gap-1.5" key={file.id}>
+        {file.type.startsWith('video/')
+          ? <video className="max-h-56 w-full rounded-[10px] border border-border bg-muted" controls preload="metadata" src={file.url} aria-label={file.name} />
+          : <img className="max-h-56 w-full rounded-[10px] border border-border bg-muted object-contain" src={file.url} alt={file.name} loading="lazy" />}
+        <figcaption><a className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground no-underline hover:text-foreground" href={file.url} target="_blank" rel="noreferrer">
+          <ArrowDownToLine size={12} aria-hidden />{file.name}</a></figcaption>
+      </figure>)}
+    </section>}
+
+    {ticket.events.length > 0 && <details className="text-[13px] text-muted-foreground">
+      <summary className="min-h-8 font-semibold text-soft">Histórico</summary>
+      <ol className="mt-2 list-decimal pl-5 font-mono text-xs leading-[1.9]">
+        {ticket.events.map((event, index) => <li key={index}>{formatDateTime(event.created_at)} · {eventLabels[event.status].toLowerCase()} · {event.actor}</li>)}
+      </ol>
     </details>}
-    {owner && <StatusForm path={path} status={ticket.status} labels={ticketStatusLabels} label="Status do ticket" onChange={onChange} />}
-    {ticket.status === 'fixed' && owner && pending && <p className="text-sm text-muted-foreground">Aguardando quem relatou o bug retestar a correção.</p>}
-    {canRetest && <SubmitForm inline onSubmit={async data => {
-      const outcome = String(data.get('outcome'));
-      await api(path + '/retest', { outcome, requestId: pending });
-      onChange(outcome === 'request' ? 'Reteste solicitado.' : outcome === 'confirmed' ? 'Correção confirmada.' : 'Ticket reaberto.');
-    }}>
-      {owner ? <Button variant="outline" name="outcome" value="request">Solicitar reteste</Button> : <>
-        <p className="w-full text-sm">O dono pediu que você teste a correção.</p>
-        <Button name="outcome" value="confirmed">Confirmar correção</Button>
-        <Button variant="outline" name="outcome" value="reopened">O bug ainda ocorre</Button>
+
+    {(owner || (ticket.status === 'fixed' && pending)) && <footer className="sticky bottom-20 mt-auto flex flex-wrap items-center gap-2.5 surface px-4 py-3.5 lg:bottom-3">
+      {owner ? <>
+        <div role="radiogroup" aria-label="Status do ticket" className="flex flex-wrap gap-0.5 rounded-[9px] bg-background p-[3px]">
+          {(Object.entries(ticketStatusLabels) as Array<[TicketStatus, string]>).map(([status, label]) => <button key={status} type="button" role="radio"
+            aria-checked={ticket.status === status} disabled={busy} onClick={() => ticket.status !== status && void setStatus(status)}
+            className="h-9 rounded-[7px] px-3 text-[13px] font-medium text-soft hover:text-foreground aria-checked:bg-muted aria-checked:font-semibold aria-checked:text-foreground disabled:opacity-60">{label}</button>)}
+        </div>
+        <Button variant="outline" className="ml-auto" disabled={busy || ticket.status !== 'fixed' || Boolean(pending)} onClick={() => void retest('request')}>
+          {pending ? 'Reteste solicitado' : 'Solicitar reteste'}
+        </Button>
+        <p className="basis-full text-xs text-muted-foreground">{ticket.status !== 'fixed' ? `Marque como Corrigido para pedir que ${ticket.reporter} reteste a correção.`
+          : pending ? `Aguardando ${ticket.reporter} retestar a correção.` : `Peça para ${ticket.reporter} confirmar se a correção funcionou.`}</p>
+      </> : <>
+        <p className="basis-full text-sm">O dono marcou este bug como corrigido e pediu que você teste de novo.</p>
+        <Button disabled={busy} onClick={() => void retest('confirmed')}><CircleCheck size={16} aria-hidden />Confirmar correção</Button>
+        <Button variant="outline" disabled={busy} onClick={() => void retest('reopened')}>O bug ainda ocorre</Button>
       </>}
-    </SubmitForm>}
+      {error && <p role="alert" className="basis-full text-sm text-destructive">{error}</p>}
+    </footer>}
   </article>;
+}
+
+function TicketsPanel({ tickets, owner, selected, onSelect, onChange, onShowReview }: {
+  tickets: Ticket[]; owner: boolean; selected?: string; onSelect: (id: string) => void; onChange: (message?: string) => void; onShowReview: (id: string) => void;
+}) {
+  const counts = { action: tickets.filter(needsAction).length, retest: tickets.filter(ticket => ticket.status === 'fixed').length, all: tickets.length };
+  const [filter, setFilter] = useState<Filter>(owner && counts.action ? 'action' : 'all');
+  const matches = (key: Filter) => (ticket: Ticket) => key === 'all' || (key === 'action' ? needsAction(ticket) : ticket.status === 'fixed');
+  const visible = tickets.filter(matches(filter));
+  const pickFilter = (key: Filter) => {
+    setFilter(key);
+    const first = tickets.find(matches(key));
+    if (first) onSelect(first.id);
+  };
+  const current = tickets.find(ticket => ticket.id === selected) ?? visible[0];
+  const position = visible.findIndex(ticket => ticket.id === current?.id);
+
+  // Fixa o ticket mostrado como seleção, para ele continuar aberto depois de mudar de status e sair do filtro.
+  useEffect(() => {
+    if (!selected && current) onSelect(current.id);
+  }, [selected, current, onSelect]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || isTyping()) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'j' && key !== 'k') return;
+      const next = visible[Math.min(visible.length - 1, Math.max(0, position + (key === 'j' ? 1 : -1)))];
+      if (next) {
+        event.preventDefault();
+        onSelect(next.id);
+        document.getElementById('ticket-row-' + next.id)?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  if (!tickets.length) return <p className="flex items-center gap-2 rounded-md bg-muted p-4 text-sm text-muted-foreground"><FolderOpen size={18} aria-hidden />Os relatos de bugs aparecem aqui.</p>;
+  const filters: Array<[Filter, string]> = [['action', 'Precisam de ação'], ['retest', 'Em reteste'], ['all', 'Todos']];
+
+  return <div className="flex flex-col overflow-hidden surface">
+    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-sidebar px-4 py-3 sm:px-5">
+      <div role="group" aria-label="Filtrar por status" className="flex flex-wrap gap-1.5">
+        {filters.map(([key, label]) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => pickFilter(key)}
+          className="h-8 rounded-full border border-border px-3 text-xs font-medium text-soft hover:text-foreground aria-pressed:border-primary aria-pressed:bg-primary-subtle aria-pressed:font-semibold aria-pressed:text-primary-strong">
+          {label} · {counts[key]}
+        </button>)}
+      </div>
+      {tickets.some(ticket => ['queued', 'running'].includes(ticket.triage_state ?? '')) && <Button variant="ghost" size="sm" onClick={() => onChange()}>Atualizar triagem</Button>}
+      <span className="ml-auto hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"><kbd>J</kbd><kbd>K</kbd>navegar</span>
+    </div>
+    <div className="flex flex-wrap items-stretch">
+      <ul aria-label="Lista de tickets" className="min-w-0 flex-[1_1_20rem] border-border bg-sidebar lg:max-w-[26rem] lg:border-r">
+        {visible.length ? visible.map(ticket => {
+          const active = ticket.id === current?.id;
+          const evidence = ticket.attachments.length + (ticket.has_evidence ? 1 : 0);
+          return <li key={ticket.id}>
+            <button id={'ticket-row-' + ticket.id} type="button" aria-current={active || undefined} onClick={() => onSelect(ticket.id)}
+              className="flex w-full flex-col gap-1.5 border-b border-border px-5 py-4 text-left hover:bg-muted/60 aria-[current]:bg-primary-subtle aria-[current]:shadow-[inset_3px_0_0_var(--primary)]">
+              <span className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-muted-foreground">{shortId(ticket.id)}</span>
+                <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-semibold', (statusTones[ticket.status] ?? statusTones.unreproduced).text)}>
+                  <StatusIcon state={ticket.status} />{ticketStatusLabels[ticket.status]}{ticket.status === 'fixed' && ticket.retest_request_id ? ' · reteste pedido' : ''}
+                </span>
+              </span>
+              <span className="text-sm font-semibold wrap-anywhere">{ticket.title || 'Bug sem título'}</span>
+              {ticket.missing.length && needsAction(ticket)
+                ? <span className="text-xs text-status-open">Faltam: {ticket.missing.map(field => reportLabels[field].toLowerCase()).join(', ')}</span>
+                : <span className="text-xs text-muted-foreground">{ticket.reporter} · {timeAgo(ticket.created_at)}{evidence ? ` · ${evidence} ${evidence === 1 ? 'evidência' : 'evidências'}` : ''}</span>}
+            </button>
+          </li>;
+        }) : <li className="px-5 py-6 text-sm text-muted-foreground">Nenhum ticket neste filtro.</li>}
+      </ul>
+      <div className="min-w-0 flex-[999_1_32rem]">
+        {current ? <TicketDetail key={current.id} ticket={current} owner={owner} tickets={tickets} onChange={onChange} onShowReview={onShowReview} />
+          : <p className="p-8 text-sm text-muted-foreground">Selecione um ticket.</p>}
+      </div>
+    </div>
+  </div>;
 }
 
 function AnnouncementStatus({ summary, onRefresh }: { summary: AnnouncementSummary; onRefresh: () => void }) {
@@ -163,113 +304,257 @@ function AnnouncementStatus({ summary, onRefresh }: { summary: AnnouncementSumma
     { label: 'Cancelados', value: cancelled },
   ].filter(item => item.value > 0);
 
-  return <section className={panel}>
-    <h2 className="flex items-center gap-2 text-sm font-semibold"><Mail size={16} className="text-muted-foreground" aria-hidden />Avisos por e-mail</h2>
-    <div aria-live="polite">
-      {!enabled && <p className="mt-1.5 text-sm text-muted-foreground">O envio está indisponível.</p>}
-      {counts.length ? <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        {counts.map(item => <div className="flex gap-1.5" key={item.label}>
-          <dt>{item.label}</dt><dd className="font-semibold text-foreground tabular-nums">{item.value}</dd>
+  return <section className={panel} aria-labelledby="announcements-title">
+    <h2 id="announcements-title" className="flex items-center gap-2 text-base font-semibold"><Mail size={17} className="text-muted-foreground" aria-hidden />Avisos por e-mail</h2>
+    <div aria-live="polite" className="mt-3">
+      {!enabled && <p className="text-sm text-muted-foreground">O envio está indisponível.</p>}
+      {counts.length ? <dl className="grid gap-2 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]">
+        {counts.map(item => <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2.5" key={item.label}>
+          <dt className="text-xs text-muted-foreground">{item.label}</dt><dd className="font-mono text-lg font-semibold">{item.value}</dd>
         </div>)}
-      </dl> : enabled && <p className="mt-1.5 text-sm text-muted-foreground">Nenhum testador inscrito para este anúncio.</p>}
+      </dl> : enabled && <p className="text-sm text-muted-foreground">Nenhum testador inscrito para este anúncio.</p>}
     </div>
-    {enabled && queued > 0 && <Button variant="ghost" className="mt-1 -ml-2 px-2" onClick={onRefresh}>Consultar fila</Button>}
+    {enabled && queued > 0 && <Button variant="outline" size="sm" className="mt-3" onClick={onRefresh}>Consultar fila</Button>}
   </section>;
 }
 
+type Tab = 'overview' | 'reviews' | 'tickets' | 'android' | 'announcements';
+const tabHashes: Record<Tab, string> = { overview: '', reviews: '#reviews', tickets: '#tickets', android: '#testadores-android', announcements: '#avisos' };
+
+function tabFromHash(hash: string): { tab: Tab; ticket?: string; review?: string } {
+  if (hash.startsWith('#ticket-')) return { tab: 'tickets', ticket: hash.slice(8) };
+  if (hash.startsWith('#review-')) return { tab: 'reviews', review: hash.slice(8) };
+  const tab = (Object.entries(tabHashes) as Array<[Tab, string]>).find(([, value]) => value && value === hash)?.[0];
+  return { tab: tab ?? 'overview' };
+}
+
+function Step({ icon: Icon, label, value, current, children }: { icon: typeof Rocket; label: string; value: string; current?: boolean; children?: ReactNode }) {
+  return <li className={cn('flex flex-col gap-1 border-border px-4 py-3.5 not-last:border-b sm:not-last:border-r sm:not-last:border-b-0', current && 'bg-primary-subtle')} aria-current={current ? 'step' : undefined}>
+    <span className={cn('flex items-center gap-1.5 text-xs', current ? 'text-primary-strong' : 'text-muted-foreground')}><Icon size={13} aria-hidden />{label}</span>
+    <span className="text-[15px] font-semibold">{value}</span>
+    {children}
+  </li>;
+}
+
 export function ProjectView({ detail, session, version, onEdit, onReview, onChange }: {
-  detail: ProjectDetail; session: Session; version: number; onEdit: () => void; onReview: () => void; onChange: (message?: string) => void;
+  detail: ProjectDetail; session: Session; version?: number; onEdit: () => void; onReview: () => void; onChange: (message?: string) => void;
 }) {
   const { project, reviews, tickets, myReview, emailAnnouncement } = detail;
   const owner = session.user?.id === project.owner_id;
   const android = project.platforms.includes('android');
   const remaining = reviewsRemaining(project);
-  const statuses: Partial<Record<ProjectStatus, string>> = project.requested_at ? projectStatusLabels : {
-    dev: projectStatusLabels.dev, prod: projectStatusLabels.prod,
-  };
+  const open = tickets.filter(needsAction).length;
+  const inRetest = tickets.filter(ticket => ticket.status === 'fixed' && ticket.retest_request_id).length;
+  const [tab, setTab] = useState<Tab>('overview');
+  const [ticketId, setTicketId] = useState<string>();
+  const { busy, error, run } = useAction(message => onChange(message));
+  const statuses = (Object.keys(projectStatusLabels) as ProjectStatus[]).filter(status => project.requested_at || status !== 'review');
+  const bugsByReview = useMemo(() => tickets.reduce<Record<string, number>>((map, ticket) => ({ ...map, [ticket.review_id]: (map[ticket.review_id] ?? 0) + 1 }), {}), [tickets]);
+  const steps = project.instructions.split('\n').map(line => line.replace(/^\s*(\d+[.)]|[-*•])\s*/, '').trim()).filter(Boolean);
+
+  const tabs: Array<{ key: Tab; label: string; count?: number }> = [
+    { key: 'overview', label: 'Visão geral' },
+    { key: 'reviews', label: 'Reviews', count: reviews.length },
+    ...(owner || tickets.length ? [{ key: 'tickets' as const, label: owner ? 'Tickets' : 'Seus tickets', count: tickets.length }] : []),
+    ...(android ? [{ key: 'android' as const, label: 'Testadores Android' }] : []),
+    ...(owner && emailAnnouncement ? [{ key: 'announcements' as const, label: 'Avisos' }] : []),
+  ];
+
+  function show(next: Tab, options: { ticket?: string; review?: string } = {}) {
+    setTab(next);
+    if (options.ticket) setTicketId(options.ticket);
+    const hash = options.ticket ? '#ticket-' + options.ticket : options.review ? '#review-' + options.review : tabHashes[next];
+    window.history.replaceState(null, '', window.location.pathname + window.location.search + hash);
+    if (options.review) window.setTimeout(() => document.getElementById('review-' + options.review)?.scrollIntoView({ block: 'center' }));
+  }
+
+  useEffect(() => {
+    const sync = () => {
+      const target = tabFromHash(window.location.hash);
+      setTab(target.tab);
+      if (target.ticket) setTicketId(target.ticket);
+      if (target.review) window.setTimeout(() => document.getElementById('review-' + target.review)?.scrollIntoView({ block: 'center' }));
+    };
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || isTyping()) return;
+      const key = event.key.toLowerCase();
+      if (key === 'e' && owner) { event.preventDefault(); onEdit(); }
+      if (key === 'r' && !owner && project.requested_at) { event.preventDefault(); onReview(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [owner, onEdit, onReview, project.requested_at]);
+
   const shareLink = () => {
     const url = new URL(window.location.pathname, session.appOrigin || window.location.origin).href;
     const text = ['Novo projeto para review no ReviewLab!', project.name + ' · ' + project.platforms.map(platform => platformLabels[platform]).join(', '),
       project.description.slice(0, 240), 'Veja os detalhes e envie sua review: ' + url].join('\n\n');
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
   };
+  const publish = () => run(() => api(projectApi(project.id) + '/request', {}), 'Projeto publicado em Explorar.');
+  const host = (() => { try { return new URL(project.url).host; } catch { return project.url; } })();
 
-  return <>
-    <Link className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:underline" href={owner ? '/?meus' : '/'}><ArrowLeft size={16} aria-hidden /> Voltar aos projetos</Link>
-    <header className="grid min-w-0 gap-4 border-b border-border pb-5 sm:pb-6">
-      <div className="flex flex-wrap items-center gap-2"><PlatformTags platforms={project.platforms} />
-        <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
+  const reviewList = (items: typeof reviews) => items.map(review => <article key={review.id} id={'review-' + review.id} className="flex scroll-mt-24 gap-3 border-t border-border py-3.5 target:bg-primary-subtle">
+    <Initials name={review.author} className="size-8 rounded-full text-xs font-semibold" />
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2 text-[13px]">
+        <span className="font-semibold">{review.author}</span>
+        <time className="text-muted-foreground" dateTime={review.created_at} title={formatDate(review.created_at)}>{timeAgo(review.created_at)}</time>
+        {bugsByReview[review.id] && <button type="button" onClick={() => show('tickets', { ticket: tickets.find(ticket => ticket.review_id === review.id)?.id })}
+          className="rounded-full bg-status-open-muted px-2 py-px text-[11px] font-semibold text-status-open">{bugsByReview[review.id]} {bugsByReview[review.id] === 1 ? 'bug' : 'bugs'}</button>}
       </div>
-      <div>
-        <h1 className="text-3xl leading-tight font-semibold tracking-tight wrap-anywhere sm:text-4xl">{project.name}</h1>
-        <p className="mt-1 text-sm wrap-anywhere text-muted-foreground">Por {projectOwnerLabel(project.owner, owner)} · {project.requested_at ? 'Anunciado em ' + formatDate(project.requested_at) : 'Rascunho'}</p>
+      <p className="text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap text-soft">{review.feedback || 'Review enviada com relato de bug.'}</p>
+    </div>
+  </article>);
+
+  return <div className="flex flex-col gap-[22px]">
+    <nav aria-label="Trilha" className="flex items-center gap-2 text-[13px] text-muted-foreground">
+      <Link href={owner ? '/?meus' : '/'} className="text-muted-foreground no-underline hover:text-foreground">{owner ? 'Meus projetos' : 'Explorar'}</Link>
+      <span aria-hidden>/</span><span className="truncate text-foreground" aria-current="page">{project.name}</span>
+    </nav>
+
+    <header className="flex flex-wrap items-start justify-between gap-5">
+      <div className="flex min-w-0 items-center gap-4">
+        <ProjectTile project={project} version={version} className="size-14 rounded-[14px] text-lg" />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[28px] leading-tight font-bold tracking-[-0.025em] wrap-anywhere">{project.name}</h1>
+            {project.requested_at ? <StatusTag state={project.status} label={projectStatusLabels[project.status]} />
+              : <span className="rounded-md border border-dashed border-input px-2 py-[3px] text-xs font-semibold text-soft">Rascunho</span>}
+          </div>
+          <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground">
+            <span>{project.requested_at ? 'Publicado em ' + formatDate(project.requested_at) : 'Criado em ' + formatDate(project.created_at)}</span>
+            {!owner && <><span aria-hidden>·</span><span>por {projectOwnerLabel(project.owner, owner)}</span></>}
+            <span aria-hidden>·</span><span className="font-mono text-xs">{project.platforms.map(platform => platformLabels[platform].toLowerCase()).join(' · ')}</span>
+            <span aria-hidden>·</span><a href={project.url} target="_blank" rel="noreferrer" className="font-mono text-xs no-underline hover:underline">{host} ↗</a>
+          </p>
+        </div>
       </div>
-      {owner && !project.requested_at && <section className="grid gap-2 rounded-lg border border-border bg-muted p-4">
-        <p className="text-sm text-muted-foreground">
-          Este rascunho só aparece para você. Publique para que outras pessoas encontrem o projeto em <strong>Explorar</strong> e enviem reviews.
-          {session.emailAnnouncementsEnabled && ' Testadores inscritos nas plataformas do projeto também podem receber um aviso por e-mail.'}
-        </p>
-        <SubmitForm inline onSubmit={async () => {
-          await api(projectApi(project.id) + '/request', {});
-          onChange('Projeto publicado em Explorar.');
-        }}>
-          <Button><MessageSquare size={16} aria-hidden />Publicar em Explorar</Button>
-        </SubmitForm>
-      </section>}
-      <div className="flex flex-wrap items-center gap-2">
-        <a className={buttonVariants({ variant: owner && project.requested_at ? 'default' : 'outline' })} href={project.url} target="_blank" rel="noreferrer">
-          Abrir projeto <ArrowUpRight size={16} aria-hidden />
-        </a>
-        {owner && <Button variant="outline" onClick={onEdit}><Pencil size={15} aria-hidden />Editar</Button>}
-        {owner && android && <a className={buttonVariants({ variant: 'outline' })} href="#testadores-android"><Users size={16} aria-hidden />Testadores Android</a>}
-        {owner && project.requested_at && <Button variant="outline" onClick={shareLink}><MessageSquare size={16} aria-hidden />Compartilhar no WhatsApp</Button>}
-        {!owner && project.requested_at && <Button onClick={onReview}><MessageSquare size={16} aria-hidden />
-          {myReview ? 'Editar review ou relatar bug' : 'Enviar review'}
-        </Button>}
+      <div className="flex flex-wrap gap-2">
+        {owner ? <>
+          <Button variant="outline" onClick={onEdit}><Pencil size={15} aria-hidden />Editar <kbd className="border-0 bg-transparent px-0">E</kbd></Button>
+          {project.requested_at && <Button variant="outline" onClick={shareLink}><Share2 size={15} aria-hidden />Compartilhar</Button>}
+          {!project.requested_at ? <Button disabled={busy} onClick={() => void publish()}><Rocket size={16} aria-hidden />Publicar em Explorar</Button>
+            : open > 0 ? <Button onClick={() => show('tickets')}><TicketIcon size={16} aria-hidden />Triar {open} {open === 1 ? 'ticket' : 'tickets'}</Button>
+            : <a className={buttonVariants()} href={project.url} target="_blank" rel="noreferrer">Abrir projeto <ArrowUpRight size={16} aria-hidden /></a>}
+        </> : <>
+          <a className={buttonVariants({ variant: 'outline' })} href={project.url} target="_blank" rel="noreferrer">Abrir projeto <ArrowUpRight size={16} aria-hidden /></a>
+          {project.requested_at && <Button onClick={onReview}><MessageSquare size={16} aria-hidden />{myReview ? 'Editar review' : 'Enviar review'} <kbd className="border-primary-foreground/30 bg-transparent text-primary-foreground/80">R</kbd></Button>}
+        </>}
       </div>
     </header>
-    <div className={cn('mt-5 grid items-start gap-4', owner && 'xl:grid-cols-[minmax(0,1fr)_18rem]')}>
-      <div className="grid min-w-0 gap-4">
-        {project.has_cover ? <ProjectCover project={project} version={version} className="aspect-[2/1] rounded-lg border" /> : null}
-        <section className={cn(panel, 'grid gap-2')}>
-          <h2 className={panelTitle}>Sobre o projeto</h2>
-          <p className={prose}>{project.description}</p>
-        </section>
-        {android && <div id="testadores-android" className="min-w-0 scroll-mt-5">
-          <AndroidTesters project={project} session={session} />
-        </div>}
-        {project.instructions && <section className={cn(panel, 'grid gap-3')}>
-          <h2 className={panelTitle}><ClipboardList size={19} aria-hidden />Como testar</h2>
-          <p className={prose}>{project.instructions}</p>
-        </section>}
-      </div>
-      {owner && <aside className="grid min-w-0 gap-4" aria-label="Gerenciamento do projeto">
-        {emailAnnouncement && <AnnouncementStatus summary={emailAnnouncement} onRefresh={() => onChange()} />}
-        <section className={panel}><StatusForm path={projectApi(project.id)} status={project.status} labels={statuses} label="Status do projeto" onChange={onChange} /></section>
-      </aside>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
+    {owner && !project.requested_at && <section className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-input bg-card px-4 py-3.5">
+      <p className="min-w-0 flex-1 text-sm text-soft">Este rascunho só aparece para você. Publique para que outras pessoas encontrem o projeto em <strong className="text-foreground">Explorar</strong> e enviem reviews.
+        {session.emailAnnouncementsEnabled && ' Testadores inscritos nas plataformas do projeto também recebem um aviso por e-mail.'}</p>
+    </section>}
+
+    {owner && project.requested_at && <ol aria-label="Ciclo do projeto" className="grid overflow-hidden surface sm:grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))]">
+      <Step icon={Globe} label="Publicado" value="Em Explorar" />
+      <Step icon={Mail} label="Avisos por e-mail" value={!emailAnnouncement?.enabled ? 'Indisponível' : `${emailAnnouncement.accepted} ${emailAnnouncement.accepted === 1 ? 'aceito' : 'aceitos'}`} />
+      <Step icon={MessageSquare} label="Reviews" value={`${project.review_count} de ${project.review_goal}${remaining ? ` · faltam ${remaining}` : ' · meta atingida'}`} current={project.status === 'review'}>
+        <ProgressBar value={project.review_count} max={project.review_goal} className="mt-1" />
+      </Step>
+      <Step icon={TicketIcon} label="Tickets" value={tickets.length ? `${open} ${open === 1 ? 'aberto' : 'abertos'} · ${inRetest} em reteste` : 'Nenhum ainda'} />
+      <Step icon={Rocket} label="Produção" value={project.status === 'prod' ? 'Em produção' : 'Próximo passo'} current={project.status === 'prod'} />
+    </ol>}
+
+    <div role="tablist" aria-label="Seções do projeto" className="flex gap-1 overflow-x-auto border-b border-border">
+      {tabs.map(item => <button key={item.key} type="button" role="tab" id={'tab-' + item.key} aria-selected={tab === item.key} aria-controls="project-panel"
+        onClick={() => show(item.key)}
+        className="h-[42px] shrink-0 border-b-2 border-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground aria-selected:border-primary aria-selected:font-semibold aria-selected:text-foreground">
+        {item.label}{item.count !== undefined && <span className="ml-1.5 font-mono text-xs">{item.count}</span>}
+      </button>)}
     </div>
-    <div className={cn('mt-4 grid items-start gap-4', (owner || tickets.length > 0) && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]')}>
-      <section className={panel}>
-        <h2 className={panelTitle}><MessageSquare size={19} aria-hidden />Reviews <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{reviews.length}</span></h2>
-        {owner && <p className="mt-2 text-sm text-muted-foreground">
-          {project.review_count} de {project.review_goal} reviews · {remaining === 0 ? 'Meta atingida' : `Restam ${remaining} para a meta`}
-        </p>}
-        {reviews.length ? reviews.map(review => <article className={entry} key={review.id} id={'review-' + review.id}>
-          <div className="flex flex-wrap justify-between gap-2">
-            <h3 className="font-semibold wrap-anywhere">{review.author}</h3>
-            <time className="text-sm text-muted-foreground" dateTime={review.created_at}>{formatDate(review.created_at)}</time>
-          </div>
-          <p className={prose}>{review.feedback || 'Review enviada com relato de bug.'}</p>
-        </article>) : <p className={emptyPanel}><MessageSquare size={18} aria-hidden />As reviews enviadas aparecem aqui.</p>}
-      </section>
-      {(owner || tickets.length > 0) && <section className={panel}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className={panelTitle}><FolderOpen size={19} aria-hidden />{owner ? 'Tickets' : 'Seus tickets'} <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{tickets.length}</span></h2>
-          {tickets.some(ticket => ['queued', 'running'].includes(ticket.triage_state ?? '')) && <Button variant="ghost" onClick={() => onChange()}>Atualizar tickets</Button>}
+
+    <div role="tabpanel" id="project-panel" aria-labelledby={'tab-' + tab}>
+      {tab === 'overview' && <div className="flex flex-wrap items-start gap-5">
+        <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-4">
+          <section className={cn(panel, 'flex flex-col gap-2.5')}>
+            <h2 className="text-base font-semibold">Sobre o projeto</h2>
+            <p className={prose}>{project.description}</p>
+          </section>
+          {steps.length > 0 && <section className={cn(panel, 'flex flex-col gap-3')}>
+            <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">Como testar</h2><CopyButton value={project.instructions} label="Copiar passos" /></div>
+            <ol className="list-decimal rounded-md border border-border bg-background py-3.5 pr-4 pl-9 font-mono text-[13px] leading-[1.9] wrap-anywhere text-soft">
+              {steps.map((step, index) => <li key={index}>{step}</li>)}
+            </ol>
+          </section>}
+          <section className={cn(panel, 'flex flex-col')}>
+            <div className="flex items-center justify-between pb-2">
+              <h2 className="text-base font-semibold">Reviews recentes</h2>
+              {reviews.length > 3 && <button type="button" className="text-[13px] font-medium text-primary hover:text-primary-strong" onClick={() => show('reviews')}>Ver todas</button>}
+            </div>
+            {reviews.length ? reviewList(reviews.slice(0, 3)) : <p className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"><MessageSquare size={17} aria-hidden />As reviews enviadas aparecem aqui.</p>}
+          </section>
         </div>
-        {tickets.length ? tickets.map(ticket => <TicketCard key={ticket.id} ticket={ticket} owner={owner} onChange={onChange} />)
-          : <p className={emptyPanel}><FolderOpen size={18} aria-hidden />Os relatos de bugs aparecem aqui.</p>}
+
+        <aside aria-label={owner ? 'Gerenciamento do projeto' : 'Sua participação'} className="flex min-w-0 flex-[1_1_17.5rem] flex-col gap-4">
+          {owner ? <>
+            <section className={asidePanel}>
+              <h2 className={asideTitle} id="project-status">Status do projeto</h2>
+              <div role="radiogroup" aria-labelledby="project-status" className="flex flex-col gap-1.5">
+                {statuses.map(status => <button key={status} type="button" role="radio" aria-checked={project.status === status} disabled={busy}
+                  onClick={() => project.status !== status && void run(() => api(projectApi(project.id) + '/status', { status }), 'Status atualizado.')}
+                  className="h-10 rounded-md border border-border px-3 text-left text-sm font-medium text-soft hover:border-input aria-checked:border-primary aria-checked:bg-primary-subtle aria-checked:font-semibold aria-checked:text-primary-strong disabled:opacity-60">
+                  {projectStatusLabels[status]}
+                </button>)}
+              </div>
+              {!project.requested_at && <p className="text-xs text-muted-foreground">Publique em Explorar para usar o status Em review.</p>}
+            </section>
+            <section className={asidePanel}>
+              <h2 className={asideTitle}>Tickets por status</h2>
+              {(Object.entries(ticketStatusLabels) as Array<[TicketStatus, string]>).map(([status, label]) => <button key={status} type="button" onClick={() => show('tickets')}
+                className="flex items-center justify-between text-sm text-foreground hover:text-primary-strong">
+                <span className={cn('flex items-center gap-2', statusTones[status].text)}><StatusIcon state={status} /><span className="text-foreground">{status === 'fixed' ? label + ' · aguardando reteste' : label}</span></span>
+                <span className="font-mono">{tickets.filter(ticket => ticket.status === status).length}</span>
+              </button>)}
+            </section>
+            <section className={asidePanel}>
+              <h2 className={cn(asideTitle, 'flex items-center gap-1.5')}><Bot size={14} aria-hidden />Acompanhar pelo agente</h2>
+              <p className="text-[13px] leading-normal text-soft">Use o servidor MCP para ver o progresso sem sair do editor.</p>
+              <code className="rounded-md border border-border bg-background p-2.5 font-mono text-xs text-primary-strong">get_project_review_progress</code>
+              <Link href="/perfil#mcp-settings" className="text-[13px] font-medium">Configurar MCP</Link>
+            </section>
+          </> : <>
+            <section className={asidePanel}>
+              <h2 className={asideTitle}>Sua review</h2>
+              <p className="text-sm text-soft">{myReview ? 'Review enviada. Você pode editá-la ou relatar outro bug.' : 'Você ainda não enviou review para este projeto.'}</p>
+              {project.requested_at && <Button onClick={onReview}>{myReview ? 'Editar review' : 'Enviar review'}</Button>}
+            </section>
+            <section className={asidePanel}>
+              <h2 className={asideTitle}>Meta de reviews</h2>
+              <div className="flex justify-between text-[13px]"><span className="font-medium">{remaining ? `Faltam ${remaining}` : 'Meta atingida'}</span><span className="font-mono text-muted-foreground">{project.review_count} / {project.review_goal}</span></div>
+              <ProgressBar value={project.review_count} max={project.review_goal} className="h-1.5" />
+            </section>
+            {tickets.length > 0 && <section className={asidePanel}>
+              <h2 className={asideTitle}>Seus tickets</h2>
+              {tickets.slice(0, 4).map(ticket => <button key={ticket.id} type="button" onClick={() => show('tickets', { ticket: ticket.id })} className="flex items-center gap-2 text-left text-sm hover:text-primary-strong">
+                <span className={(statusTones[ticket.status] ?? statusTones.unreproduced).text}><StatusIcon state={ticket.status} /></span><span className="min-w-0 truncate">{ticket.title || 'Bug sem título'}</span>
+              </button>)}
+            </section>}
+          </>}
+        </aside>
+      </div>}
+
+      {tab === 'reviews' && <section className={panel} aria-label="Reviews">
+        {owner && <p className="pb-3 text-sm text-muted-foreground">{project.review_count} de {project.review_goal} reviews · {remaining === 0 ? 'meta atingida' : `faltam ${remaining} para a meta`}</p>}
+        {reviews.length ? reviewList(reviews) : <p className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"><MessageSquare size={17} aria-hidden />As reviews enviadas aparecem aqui.</p>}
       </section>}
+
+      {tab === 'tickets' && <TicketsPanel tickets={tickets} owner={owner} selected={ticketId} onSelect={id => show('tickets', { ticket: id })} onChange={onChange}
+        onShowReview={id => show('reviews', { review: id })} />}
+
+      {tab === 'android' && <div id="testadores-android"><AndroidTesters project={project} session={session} /></div>}
+
+      {tab === 'announcements' && emailAnnouncement && <AnnouncementStatus summary={emailAnnouncement} onRefresh={() => onChange()} />}
     </div>
-  </>;
+  </div>;
 }

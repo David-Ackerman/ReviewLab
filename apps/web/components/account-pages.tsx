@@ -2,34 +2,33 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Boxes, CheckCircle2, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Mail } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../lib/client';
 import { CheckField, PlatformChoices, SubmitForm } from './forms';
 import { ThemeToggle } from './theme';
-import { Button, buttonVariants } from './ui/button';
+import { Button, Logo, buttonVariants } from './ui/button';
 import { Input } from './ui/input';
 
-const fieldClass = 'grid gap-1.5 text-sm font-medium';
-const textLink = 'font-medium text-primary underline-offset-4 hover:underline';
+const fieldClass = 'grid gap-1.5 text-[13px] font-semibold';
+const textLink = 'font-medium underline-offset-4 hover:underline';
 
 function AccountLayout({ title, description, children, footer }: {
   title: string; description: string; children: ReactNode; footer?: ReactNode;
 }) {
   return <div className="flex min-h-dvh flex-col">
-    <header className="flex min-h-16 items-center justify-between border-b border-border bg-card px-4 sm:px-8">
-      <Link href="/" className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight">
-        <span className="grid size-8 place-items-center rounded-md bg-primary text-primary-foreground"><Boxes size={18} aria-hidden /></span>
-        ReviewLab
+    <header className="flex min-h-16 items-center justify-between border-b border-border bg-sidebar px-4 sm:px-8">
+      <Link href="/" className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-foreground no-underline hover:text-foreground">
+        <Logo />ReviewLab
       </Link>
-      <ThemeToggle />
+      <ThemeToggle bordered />
     </header>
-    <main className="mx-auto grid w-full max-w-md flex-1 content-start gap-6 px-4 py-10 sm:py-18">
-      <Link href="/" className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft size={15} aria-hidden /> Voltar ao início</Link>
-      <section className="rounded-lg border border-border bg-card p-5 shadow-xs sm:p-7">
+    <main className="mx-auto grid w-full max-w-md flex-1 content-start gap-5 px-4 py-10 sm:py-16">
+      <Link href="/" className="inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted-foreground no-underline hover:text-foreground"><ArrowLeft size={15} aria-hidden /> Voltar ao início</Link>
+      <section className="surface p-5 sm:p-7">
         <header className="mb-6">
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+          <h1 className="text-[28px] leading-tight font-bold tracking-[-0.025em]">{title}</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{description}</p>
         </header>
         {children}
         {footer && <div className="mt-6 border-t border-border pt-4 text-sm text-muted-foreground">{footer}</div>}

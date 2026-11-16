@@ -24,6 +24,24 @@ export const evidenceTypes = imageTypes + ',video/mp4,video/webm';
 const dates = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'America/Sao_Paulo' });
 export const formatDate = (value: string) => dates.format(new Date(value));
 
+const times = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
+export const formatDateTime = (value: string) => times.format(new Date(value));
+
+/** Tempo relativo curto para listas: "há 2 h", "ontem", "há 4 dias". */
+export function timeAgo(value: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return 'ontem';
+  if (days < 30) return `há ${days} dias`;
+  return formatDate(value);
+}
+
+export const shortId = (id: string) => '#' + id.slice(0, 8).toUpperCase();
+
 export async function stageUploads(data: FormData, field: 'cover' | 'evidence', projectId: string) {
   const files = data.getAll(field).filter((file): file is File => file instanceof File && file.size > 0);
   if (files.length > 4 || files.reduce((size, file) => size + file.size, 0) > 25 * 1024 * 1024) {

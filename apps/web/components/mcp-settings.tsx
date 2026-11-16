@@ -60,8 +60,8 @@ export function McpSettings() {
   }, null, 2);
   const config = client === 'codex' ? codexConfig : vsCodeConfig;
 
-  return <section className="min-w-0 rounded-lg border border-border bg-card p-4 sm:p-6" aria-labelledby="mcp-settings">
-    <h2 id="mcp-settings" className="flex items-center gap-2 font-semibold"><KeyRound size={18} className="text-primary" aria-hidden /> Integração MCP</h2>
+  return <section className="min-w-0 scroll-mt-24 surface p-5 sm:p-6" id="mcp" aria-labelledby="mcp-settings">
+    <h2 id="mcp-settings" className="flex scroll-mt-24 items-center gap-2 font-semibold"><KeyRound size={17} className="text-muted-foreground" aria-hidden /> Servidor MCP</h2>
     <p className="mt-2 text-sm text-muted-foreground">Conecte sua IA para consultar projetos e reviews. Habilite o cadastro ao criar a chave se quiser salvar rascunhos pela IA.</p>
     <div className="mt-4">
       <SubmitForm onSubmit={async data => {
@@ -112,10 +112,10 @@ export function McpSettings() {
       <p className="mt-2 text-sm text-muted-foreground">{client === 'codex'
         ? 'Defina REVIEWLAB_MCP_TOKEN no ambiente que inicia o Codex e adicione esta configuração a ~/.codex/config.toml.'
         : 'Salve em .vscode/mcp.json. Ao iniciar o servidor no VS Code, cole a chave quando solicitado.'}</p>
-      <pre className="my-2 overflow-auto rounded-md bg-muted p-3 text-xs">{config}</pre>
+      <pre className="my-2 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-xs">{config}</pre>
       <Button type="button" variant="outline" onClick={() => void copy(config, 'Configuração copiada.')}>Copiar configuração</Button>
     </details>}
-    <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium text-primary">
+    <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium">
       <a className="hover:underline" href="/skills/reviewlab-projects/SKILL.md" download="SKILL.md">Baixar skill de projetos</a>
       <a className="hover:underline" href="/skills/reviewlab-review-progress/SKILL.md" download="SKILL.md">Baixar skill de acompanhamento</a>
     </div>

@@ -11,7 +11,7 @@ export const SelectValue = SelectPrimitive.Value;
 
 export function SelectTrigger({ className, children, ...props }: ComponentProps<typeof SelectPrimitive.Trigger>) {
   return <SelectPrimitive.Trigger data-slot="select-trigger" className={cn(
-    'flex min-h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 py-2 text-left text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-muted data-[state=open]:border-primary disabled:opacity-50 [&>span]:truncate',
+    'flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted data-[state=open]:border-primary disabled:opacity-50 [&>span]:truncate',
     className,
   )} {...props}>
     {children}
